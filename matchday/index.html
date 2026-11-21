@@ -309,6 +309,27 @@ img,video{max-width:100%;height:auto}
 @media (min-width:768px){.md\:text-sm{font-size:.875rem;line-height:1.25rem}}
 #taktikOverlay{position:relative;width:fit-content;max-width:100%;margin:0 auto 6px;padding:3px 5px;background:#0f172ad9;border:1px solid #334155;border-radius:10px}
 body.is-taktik-fullscreen #taktikOverlay{margin-bottom:4px}
+@media (min-width:900px) and (orientation:landscape){
+  body:not(.is-taktik-fullscreen):has(#view-tactic.active) .container{max-width:1800px}
+  body.is-taktik-fullscreen #view-tactic .taktik-pitch-container{height:calc(100vh - 80px)!important;max-height:none!important;flex:none!important;margin:0!important}
+  body.is-taktik-fullscreen #view-tactic #taktikBenchList{display:flex!important}
+  body.is-taktik-fullscreen #view-tactic .tk-layout{display:grid;grid-template-columns:auto minmax(300px,1fr);grid-template-areas:"main side" "main side2";gap:12px;align-items:start;color:#e5e7eb}
+  body.is-taktik-fullscreen #view-tactic .tk-main{grid-area:main}body.is-taktik-fullscreen #view-tactic .tk-side{grid-area:side}body.is-taktik-fullscreen #view-tactic .tk-side2{grid-area:side2}
+  body.is-taktik-fullscreen #view-tactic .tk-modes{flex-wrap:wrap;overflow:visible}
+  body.is-taktik-fullscreen #view-tactic .tk-side .row.spread{flex-direction:column;align-items:stretch}
+  body:not(.is-taktik-fullscreen) #view-tactic .tk-layout{display:grid;grid-template-columns:auto minmax(300px,1fr);grid-template-areas:"main side" "main side2";gap:12px;align-items:start}
+  body:not(.is-taktik-fullscreen) #view-tactic .tk-main{grid-area:main}
+  body:not(.is-taktik-fullscreen) #view-tactic .tk-side{grid-area:side}
+  body:not(.is-taktik-fullscreen) #view-tactic .tk-side2{grid-area:side2}
+  body:not(.is-taktik-fullscreen) #view-tactic .taktik-pitch-container{height:calc(100vh - 150px);min-height:480px;max-width:none;margin:0}
+  body:not(.is-taktik-fullscreen) #view-tactic .tk-modes{flex-wrap:wrap;overflow:visible}
+  body:not(.is-taktik-fullscreen) #view-tactic .tk-side .row.spread{flex-direction:column;align-items:stretch}
+  body:not(.is-taktik-fullscreen) #view-tactic .tk-side #taktikOverlay{margin:6px 0}
+}
+@media (max-width:899px),(orientation:portrait){
+  body.is-taktik-fullscreen .tk-layout,body.is-taktik-fullscreen .tk-side,body.is-taktik-fullscreen .tk-main,body.is-taktik-fullscreen .tk-side2{display:contents}
+  body:not(.is-taktik-fullscreen) #view-tactic .taktik-pitch-container{height:min(86vh,calc((100vw - 28px)*1.54))}
+}
 </style>
 <style>
 :root{color-scheme:dark;--bg:#080d17;--panel:#111827;--panel2:#1f2937;--line:#374151;--text:#f9fafb;--muted:#cbd5e1;--green:#16a34a;--green2:#14532d;--amber:#f59e0b;--red:#dc2626;--blue:#2563eb}
@@ -773,6 +794,7 @@ html.light .dbbar .tr{background:#e2e8f0}
   <!-- TAKTIKTAFEL VIEW -->
   <section id="view-tactic" class="view">
     <div class="panel">
+    <div class="tk-layout"><div class="tk-side">
       <div class="row spread flex-wrap items-center gap-2 mb-3">
         <!-- Formations-Selects Heim & Gegner -->
         <div class="flex items-center gap-2">
@@ -783,7 +805,7 @@ html.light .dbbar .tr{background:#e2e8f0}
         </div>
 
         <!-- Moduswahl als Segmented Control -->
-        <div class="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-700" style="max-width:100%;overflow-x:auto">
+        <div class="tk-modes flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-700" style="max-width:100%;overflow-x:auto">
           <button id="modeBtn-move" onclick="setTaktikMode('move')" class="mode-btn active-mode bg-emerald-600 text-white py-1 px-2.5 rounded-md text-xs font-bold">✋ Verschieben</button>
           <button id="modeBtn-run" onclick="setTaktikMode('run')" class="mode-btn text-amber-300 py-1 px-2.5 rounded-md text-xs font-bold hover:bg-slate-800">🏃‍♂️ Laufweg</button>
           <button id="modeBtn-pass" onclick="setTaktikMode('pass')" class="mode-btn text-sky-300 py-1 px-2.5 rounded-md text-xs font-bold hover:bg-slate-800">⚽ Passweg</button>
@@ -821,6 +843,7 @@ html.light .dbbar .tr{background:#e2e8f0}
         </div>
 
 
+    </div><div class="tk-main">
       <!-- Taktik Spielfeld -->
       <div id="taktikPitch" class="taktik-pitch-container relative">
         <div id="pitchZoomWrapper" class="pitch-zoom-wrapper">
@@ -844,6 +867,7 @@ html.light .dbbar .tr{background:#e2e8f0}
         </div>
       </div>
 
+    </div><div class="tk-side2">
       <!-- Ersatzspieler Bank auf der Taktiktafel -->
       <div class="w-full mt-3 bg-slate-800 p-3 rounded-lg border border-slate-700 flex flex-col gap-2">
         <div class="flex justify-between items-center"><span class="text-sm font-bold text-slate-300">👥 Kader (● = steht auf dem Taktikfeld)</span></div>
@@ -855,6 +879,7 @@ html.light .dbbar .tr{background:#e2e8f0}
         <button onclick="document.getElementById('importSlotsFile').click()" class="bg-slate-700 hover:bg-slate-600 text-amber-300 px-2.5 py-1 rounded text-xs font-semibold">Importieren</button>
         <input id="importSlotsFile" type="file" accept="application/json,.json" class="hide" onchange="importSlots(event)">
       </div>
+    </div></div>
     </div>
   </section>
 
@@ -983,19 +1008,21 @@ html.light .dbbar .tr{background:#e2e8f0}
       <div id="seasonMetricDesc" class="mutedtxt" style="margin:2px 0 8px"></div>
       <div id="seasonChart" class="chartwrap"></div>
     </div>
-    <div class="panel">
-      <div class="row spread" style="margin-bottom:10px"><h2 style="margin:0">Tabelle</h2><div class="row"><button class="small muted" onclick="exportSeasonCSV('players')">⬇ CSV Spieler</button><button class="small muted" onclick="exportSeasonCSV('matches')">⬇ CSV Spiele</button></div></div>
+    <details class="panel fold" id="foldTable" open>
+      <summary style="cursor:pointer;font-weight:900;font-size:1.05rem">Tabelle</summary>
+      <div class="row" style="margin:10px 0"><button class="small muted" onclick="exportSeasonCSV('players')">⬇ CSV Spieler</button><button class="small muted" onclick="exportSeasonCSV('matches')">⬇ CSV Spiele</button></div>
       <div class="row" style="margin-bottom:12px">
         <label for="sortSeason" style="margin:0">Sortieren</label>
         <select id="sortSeason" style="max-width:240px" onchange="renderSeason()"><option value="minutes">Gesamtminuten</option><option value="avg">Ø Minuten</option><option value="name">Name</option></select>
       </div>
       <div class="tablewrap"><table id="seasonTable"></table></div>
-    </div>
-    <div class="panel">
-      <h2>Anwesenheit &amp; Spieltagskader</h2>
+    </details>
+    <details class="panel fold" id="foldAtt" open>
+      <summary style="cursor:pointer;font-weight:900;font-size:1.05rem">Anwesenheit &amp; Spieltagskader</summary>
+      <div style="height:10px"></div>
       <div class="mutedtxt" style="margin-bottom:10px">Zählt pro Spieler die Spieltage. „Nicht erfasst“ sind Spiele ohne Angabe – dort kannst du den Status in den Spiel-Details nachtragen.</div>
       <div class="tablewrap"><table id="seasonAttendance"></table></div>
-    </div>
+    </details>
     <div class="panel">
       <h2>Spieler im Detail</h2>
       <select id="playerSel" onchange="renderSeason()" style="max-width:320px"></select>
@@ -1117,7 +1144,14 @@ function mdReload(){
   quickSlots={};loadQuickSlots();loadSeason();
   initTaktikPlayers();renderAll();renderSeason();updateSlotButtonsUI();
 }
+function foldInit(){
+  document.querySelectorAll('details.fold').forEach(d=>{
+    try{if(localStorage.getItem('md-fold-'+d.id)==='0')d.open=false}catch(e){}
+    d.addEventListener('toggle',()=>{try{localStorage.setItem('md-fold-'+d.id,d.open?'1':'0')}catch(e){}});
+  });
+}
 function init(){
+  foldInit();
   let loaded=null;
   try{loaded=JSON.parse(localStorage.getItem(KEY))}catch(e){}
   state=loaded?normalizeState(loaded):blankState();
@@ -1471,7 +1505,7 @@ function renderLive(){
   $('liveBench').innerHTML=bench.length?bench.map(p=>`<button class="playerbtn" onclick="selectLivePlayer('${p.id}')"><span class="num">#${p.number}</span><span class="pname">${esc(p.name)}<br><small class="mutedtxt live-time" data-player-id="${p.id}">Bank · ${formatTime(p.seconds)}</small></span></button>`).join(''):'<div class="empty">Keine Bankspieler.</div>';
   $('liveInstruction').textContent=selectedOut?`Ausgewählt: #${player(selectedOut)?.number} ${player(selectedOut)?.name}. Jetzt Bankspieler antippen.`:'Zuerst Feldspieler, danach Bankspieler antippen.';
   $('cancelSwap').classList.toggle('hide',!selectedOut);
-  $('pendingPlan').innerHTML=renderPendingPlan();
+  $('pendingPlan').innerHTML=renderPendingPlan()+livePreviewHtml();
   const subs=state.game.logs.filter(l=>l.type==='sub'),lastId=subs.length?subs[subs.length-1].id:null;
   $('recentLogs').innerHTML=(state.game.ended?[...subs]:subs.slice(-4)).reverse().map(l=>`<div class="event"><div class="row spread"><div><div class="mutedtxt">${l.half}. HZ · ${formatTime(l.seconds)}</div><b>${esc(l.outName)} → ${esc(l.inName)}</b></div>${state.game.ended?`<button class="small danger" onclick="deleteSub('${l.id}')" title="Wechsel löschen" aria-label="Wechsel löschen">🗑 Löschen</button>`:l.id===lastId?`<button class="small muted" onclick="undoSub('${l.id}')">↩ Rückgängig</button>`:''}</div></div>`).join('')||'<div class="empty">Keine Wechsel bisher.</div>';
 }
@@ -1550,6 +1584,32 @@ function pendingPairs(){
     pairs.push({o,n,done,ok:!!(o&&n&&!done&&o.onField&&!n.onField)});
   }
   return {block,pairs};
+}
+function livePreviewHtml(){
+  const g=state.game;if(g.ended||gameNotStarted())return '';
+  const block=Math.min(WINDOWS.length-1,Math.floor(g.elapsed/600)),nb=block+1;
+  if(nb>=WINDOWS.length)return '';
+  const cur=blockArr(block).slice(0,FIELDN),nxt=blockArr(nb).slice(0,FIELDN);
+  const base=new Set(playersSorted().filter(p=>p.onField).map(p=>p.id));
+  pendingPairs().pairs.filter(x=>x.ok).forEach(x=>{base.delete(x.o.id);base.add(x.n.id)});
+  const missing=cur.filter(id=>!base.has(id)),extra=[...base].filter(id=>!cur.includes(id));
+  const dev=missing.length>0||extra.length>0;
+  const outs=[...base].filter(id=>!nxt.includes(id)),ins=nxt.filter(id=>!base.has(id));
+  const pOuts=cur.filter(id=>!nxt.includes(id)),pIns=nxt.filter(id=>!cur.includes(id));
+  const pairs=[],ro=[...outs],ri=[...ins];
+  for(let k=0;k<Math.min(pOuts.length,pIns.length);k++){
+    const a=ro.indexOf(pOuts[k]),b=ri.indexOf(pIns[k]);
+    if(a>=0&&b>=0){pairs.push({o:pOuts[k],n:pIns[k],plan:true});ro.splice(a,1);ri.splice(b,1)}
+  }
+  for(let k=0;k<Math.max(ro.length,ri.length);k++)pairs.push({o:ro[k],n:ri[k],plan:false});
+  const nm=id=>{const p=player(id);return p?`#${p.number} ${esc(p.name)}`:'—'};
+  const warn='color:var(--warn);font-weight:800';
+  const planTxt=pOuts.map((o,k)=>`${nm(o)} ↔ ${nm(pIns[k])}`).join(' · ');
+  return `<div class="notice" style="margin-top:8px"><b>⏭ Nächster Block ${nb+1} · ab ${nb*10}'</b>`
+    +(dev?`<div style="${warn};margin-top:4px">⚠ Feld weicht vom Plan (Block ${block+1}) ab: ${extra.map(nm).join(', ')||'–'} statt ${missing.map(nm).join(', ')||'–'} → Wechsel unten angepasst.</div>`:'')
+    +(pairs.length?pairs.map(x=>`<div class="subrow" style="margin-top:6px"><div>🟥 ${x.o?nm(x.o):'—'}</div><div>↔</div><div>🟩 ${x.n?nm(x.n):'—'}</div>${x.plan?'':`<div style="grid-column:1/-1;${warn}">⚠ anders als geplant</div>`}</div>`).join(''):'<div class="mutedtxt" style="margin-top:4px">Keine Wechsel geplant.</div>')
+    +(dev&&planTxt?`<div class="mutedtxt" style="margin-top:6px">Plan wäre: ${planTxt}</div>`:'')
+    +'</div>';
 }
 function renderPendingPlan(){
   const {block,pairs}=pendingPairs();

@@ -1,8 +1,23 @@
 <!DOCTYPE html>
 <html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<meta http-equiv="refresh" content="0; url=Spielerliste/">
-<title>SGM Spielerverwaltung</title></head>
-<body><p>Weiter zur <a href="Spielerliste/">SGM Spielerliste</a> …</p>
-<script>location.replace('Spielerliste/' + location.search + location.hash);</script>
+<meta name="theme-color" content="#0f1720">
+<title>SGM Tools</title>
+<style>
+body{margin:0;background:#0f1720;color:#e8eef4;font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;justify-content:center}
+main{width:min(480px,92vw);padding:32px 0}
+h1{font-size:20px;margin:0 0 16px}
+a{display:block;background:#17212c;border:1px solid #2b3a4a;border-radius:12px;padding:16px;margin-bottom:10px;color:#e8eef4;text-decoration:none}
+a b{display:block;font-size:17px}a span{color:#a9b6c4;font-size:13px}
+a:active{background:#1f2b38}
+</style></head>
+<body><main>
+<h1>SGM Tools</h1>
+<a href="Spielerliste/"><b>👥 Spielerliste</b><span>Spielerverwaltung der SGM – Anmeldung mit Vereinskonto</span></a>
+<a href="matchday/"><b>⚽ Matchday</b><span>Spieltag &amp; Taktik</span></a>
+<a href="Trainingsplaner/"><b>📋 Trainingsplaner</b><span>Trainingseinheiten planen</span></a>
+</main>
+<script>/* alte Anmelde-Rücksprünge auf /sgm/ zur Spielerliste weiterleiten */
+if (/[?&](code|error)=/.test(location.search)) location.replace('Spielerliste/' + location.search);</script>
 </body></html>

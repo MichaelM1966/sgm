@@ -316,24 +316,31 @@ body.pm.c3 .dash{grid-template-columns:repeat(4,1fr)!important}
   <!-- DATEN -->
   <section id="tab-daten" class="hidden">
     <div class="card">
-      <h2>JSON – komplettes Backup</h2>
+      <h2>Sicherung (JSON)</h2>
       <div class="grid2">
-        <button class="btn pri" id="bkExport">JSON exportieren</button>
-        <button class="btn" id="bkImportBtn">JSON importieren</button>
+        <button class="btn pri" id="bkExport">Sicherung herunterladen</button>
+        <button class="btn" id="bkImportBtn">Sicherung einspielen …</button>
       </div>
-      <p class="hint" style="margin-top:6px">Enthält alle Daten inkl. Status, Zurückstellung, Notizen und Saison. Beim Import: ersetzen oder nur neue Spieler ergänzen.</p>
+      <p class="hint" style="margin-top:6px"><b>Herunterladen</b> speichert alle Spieler als Datei auf deinem Gerät – an der gemeinsamen Liste ändert sich nichts.<br>
+      <b>Einspielen</b> liest eine solche Datei ein. Danach wählst du: <b>nur fehlende Spieler hinzufügen</b> (sicher) oder <b>gemeinsame Liste komplett ersetzen</b>.</p>
       <input type="file" id="bkFile" accept=".json,application/json" class="hidden">
       <p class="hint" id="bkInfo"></p>
     </div>
     <div class="card">
-      <h2>CSV – für Excel</h2>
+      <h2>Excel / DFBnet (CSV)</h2>
       <div class="grid2">
-        <button class="btn pri" id="csvExport">CSV exportieren</button>
-        <button class="btn" id="csvImportBtn">CSV importieren</button>
+        <button class="btn pri" id="csvExport">Liste für Excel herunterladen</button>
+        <button class="btn" id="csvImportBtn">CSV einlesen …</button>
       </div>
       <label class="toggle" style="margin-top:8px"><input type="checkbox" id="csvFiltered"> Nur die aktuell gefilterte Liste aus dem Tab Spieler exportieren</label>
       <input type="file" id="csvFile" accept=".csv,text/csv,text/plain" class="hidden">
-      <p class="hint">Zwei Formate: <b>DFBnet-Spielberechtigungsliste</b> (Name; Vorname; Geb.; …; Passnummer) – wird mit den vorhandenen Spielern abgeglichen, Verein für neue Spieler wählbar. Oder eine <b>eigene Liste</b> aus Excel („Speichern unter → CSV“) mit Nachname; Vorname; Geb. Datum; Verein; Status; optional Zurückgestellt, Passnummer, Notiz. Der Export öffnet sich direkt in Excel.</p>
+      <p class="hint"><b>Herunterladen</b> erzeugt eine Datei für Excel – an der gemeinsamen Liste ändert sich nichts.</p>
+      <p class="hint"><b>Einlesen</b> erkennt zwei Arten von Dateien:</p>
+      <ul class="hint" style="color:var(--ink2);font-size:13px;margin:4px 0 0;padding-left:18px">
+        <li><b>DFBnet-Spielberechtigungsliste</b> (ohne Spalte „Verein“): wird <b>abgeglichen</b> – vorhandene Spieler bekommen ggf. die Passnummer, fehlende werden <b>hinzugefügt</b>. Es wird nichts gelöscht.</li>
+        <li><b>Eigene Liste aus Excel</b> (mit Spalte „Verein“): Danach wählst du <b>Abgleichen &amp; hinzufügen</b> (sicher) oder <b>gemeinsame Liste komplett ersetzen</b>.</li>
+      </ul>
+      <p class="hint" style="color:var(--warn)">⚠ „Komplett ersetzen“ löscht alle Spieler, die nicht in der Datei stehen – <b>für alle Nutzer</b>. Vorher wird automatisch eine Sicherung heruntergeladen.</p>
     </div>
     <div class="card">
       <h2>Drucken</h2>
@@ -419,6 +426,15 @@ body.pm.c3 .dash{grid-template-columns:repeat(4,1fr)!important}
       <button type="submit" class="btn pri" id="impOk">Übernehmen</button>
     </div>
   </form>
+</dialog>
+<dialog id="modeDlg">
+  <div class="dlg">
+    <h3 id="modeTitle">Datei einlesen</h3>
+    <div id="modeSum" style="font-size:14px;margin-bottom:12px"></div>
+    <button type="button" class="btn pri" id="modeMerge" style="width:100%;text-align:left;margin-bottom:8px"></button>
+    <button type="button" class="btn danger" id="modeReplace" style="width:100%;text-align:left;margin-bottom:8px"></button>
+    <button type="button" class="btn" id="modeCancel" style="width:100%">Abbrechen – nichts ändern</button>
+  </div>
 </dialog>
 <div class="toast" id="toast"></div>
 <div class="selbar hidden" id="selbar">
@@ -845,8 +861,13 @@ $('#bkFile').onchange = async e => {
     const d = JSON.parse(await f.text());
     if (!Array.isArray(d.players)) throw 0;
     const list = d.players.map(p => ({id:p.id||uid(), n:p.n||'', v:p.v||'', g:p.g||'', c:p.c||'', s:normStatus(p.s), note:p.note||'', z:p.z?1:0, pass:p.pass||''}));
-    const replace = confirm(`${list.length} Spieler in der JSON-Datei.\n\nOK = Liste komplett ersetzen\nAbbrechen = nur neue Spieler ergänzen`);
-    if (replace) { S.players = list; if (d.season) S.season = d.season; }
+    const keyOf = p => (p.n+'|'+p.v+'|'+p.g).toLowerCase(), haveK = new Set(S.players.map(keyOf));
+    const mt = list.filter(p => haveK.has(keyOf(p))).length;
+    const mode = await chooseImport({title:'Sicherung einspielen', total:list.length, matched:mt, fresh:list.length-mt,
+      mergeLabel:'Nur fehlende Spieler hinzufügen (empfohlen)', mergeHint:'Vorhandene Spieler bleiben unverändert, nichts wird gelöscht.'});
+    if (!mode) return;
+    const replace = mode === 'replace';
+    if (replace) { autoBackup(); S.players = list; if (d.season) S.season = d.season; }
     else { const key = p => (p.n+'|'+p.v+'|'+p.g).toLowerCase(), have = new Set(S.players.map(key)); let added = 0;
       list.forEach(p => { if (!have.has(key(p))) { S.players.push({...p, id:uid()}); added++; } }); save(); renderAll(); toast(added+' neue Spieler ergänzt'); return; }
     save(); fillSeason(); renderAll(); toast('Backup geladen');
@@ -858,7 +879,7 @@ function renderBkInfo(){ $('#bkInfo').textContent = S.backupAt ? 'Letztes Backup
 $('#csvExport').onclick = () => {
   const arr = $('#csvFiltered').checked ? filtered() : S.players.slice().sort((a,b)=>a.n.localeCompare(b.n,'de')||a.v.localeCompare(b.v,'de'));
   const lines = [['Nachname','Vorname','Geb. Datum','Verein','Status','Jahrgang','Jugend '+seasonLabel(S.season),'Zurückgestellt','Passnummer','Notiz']]
-    .concat(filtered().map(p => { const j = jugendOf(p); return [p.n, p.v, fmtDate(p.g), p.c, p.s, year(p)||'', j.j+(j.half?' ('+j.half+')':''), p.z?'ja':'', p.pass||'', p.note]; }));
+    .concat(arr.map(p => { const j = jugendOf(p); return [p.n, p.v, fmtDate(p.g), p.c, p.s, year(p)||'', j.j+(j.half?' ('+j.half+')':''), p.z?'ja':'', p.pass||'', p.note]; }));
   download(`SGM_Spielerliste_${stamp()}.csv`, toCsv(lines), 'text/csv');
 };
 function parseCsv(txt){
@@ -910,13 +931,39 @@ $('#csvFile').onchange = async e => {
     .filter(p => p.n && p.n.toLowerCase() !== 'ergebnis');
   if (!list.length) { toast('Keine Spieler in der Datei gefunden'); return; }
   if (ci.c < 0) return teamImport(list, f.name);   // DFBnet-Liste ohne Vereinsspalte → abgleichen
-  const replace = confirm(`${list.length} Spieler gefunden.\n\nOK = Liste komplett ersetzen\nAbbrechen = abgleichen (vorhandene aktualisieren, neue ergänzen)`);
-  if (replace) { S.players = list.map(p => ({id:uid(), ...p})); save(); renderAll(); toast('Liste ersetzt'); return; }
+  const mt = list.filter(p => findPlayer(p)).length;
+  const mode = await chooseImport({title:'Eigene Liste einlesen', total:list.length, matched:mt, fresh:list.length-mt,
+    mergeLabel:'Abgleichen & fehlende hinzufügen (empfohlen)', mergeHint:'Vorhandene Spieler: Verein, Status und Passnummer aus der Datei übernehmen. Neue werden ergänzt. Nichts wird gelöscht.'});
+  if (!mode) return;
+  const replace = mode === 'replace';
+  if (replace) { autoBackup(); S.players = list.map(p => ({id:uid(), ...p})); save(); renderAll(); toast('Liste ersetzt'); return; }
   let added = 0, upd = 0;
   list.forEach(p => { const m = findPlayer(p); if (m) { if (p.pass) m.pass = p.pass; if (p.c) m.c = p.c; m.s = p.s; upd++; } else { S.players.push({id:uid(), ...p}); added++; } });
   save(); renderAll(); toast(`${upd} aktualisiert, ${added} neu ergänzt`);
 };
 let IMP = null;
+// Klare Auswahl: hinzufügen/abgleichen oder komplett ersetzen
+function chooseImport(o){
+  return new Promise(res => {
+    const d = $('#modeDlg');
+    $('#modeTitle').textContent = o.title;
+    $('#modeSum').innerHTML = `<b>${o.total}</b> Spieler in der Datei<br><b>${o.matched}</b> davon schon in der Liste, <b>${o.fresh}</b> neu<br><span style="color:var(--ink2)">Aktuell in der gemeinsamen Liste: <b>${S.players.length}</b> Spieler</span>`;
+    $('#modeMerge').innerHTML = `<b>${o.mergeLabel}</b><br><span style="font-size:12px;font-weight:400">${o.mergeHint}</span>`;
+    $('#modeReplace').innerHTML = `<b>Gemeinsame Liste komplett ersetzen</b><br><span style="font-size:12px">Danach gibt es nur noch die ${o.total} Spieler aus der Datei – ${S.players.length} jetzige werden gelöscht, für alle Nutzer.</span>`;
+    const done = v => { d.close(); res(v); };
+    $('#modeMerge').onclick = () => done('merge');
+    $('#modeCancel').onclick = () => done(null);
+    $('#modeReplace').onclick = () => {
+      const t = prompt(`Achtung: Die gemeinsame Liste mit ${S.players.length} Spielern wird für ALLE Nutzer durch die ${o.total} Spieler aus der Datei ersetzt.\nVorher wird automatisch eine Sicherung heruntergeladen.\n\nZum Bestätigen bitte ERSETZEN eintippen:`);
+      if (t && t.trim().toUpperCase() === 'ERSETZEN') done('replace'); else toast('Nicht ersetzt');
+    };
+    d.oncancel = () => res(null);
+    d.showModal();
+  });
+}
+function autoBackup(){
+  download(`SGM_Spieler_Sicherung_vor_Ersetzen_${stamp()}.json`, JSON.stringify({app:'sgm-spieler', version:1, exportedAt:new Date().toISOString(), season:S.season, players:S.players}, null, 1), 'application/json');
+}
 function teamImport(list, fname){
   const matched = [], fresh = [];
   list.forEach(p => { const m = findPlayer(p); m ? matched.push([m,p]) : fresh.push(p); });

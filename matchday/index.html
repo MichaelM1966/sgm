@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#111827">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Matchday">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <script>try{if(localStorage.getItem("c-jugend-theme")==="light")document.documentElement.classList.add("light")}catch(e){}</script>
 <script>
 /* =====================================================================
@@ -25,7 +32,7 @@
   const ACTIVE=location.protocol==='https:'||['localhost','127.0.0.1'].includes(location.hostname);
   const FILES={state:{file:'state.json',key:'c-jugend-master-tool-v1'},season:{file:'season.json',key:'c-jugend-season-v1'},archive:{file:'archive.json',key:'c-jugend-season-archive-v1'},slots:{file:'slots.json',key:'c_jugend_quick_slots'}};
   const NAMES=Object.keys(FILES);
-  window.MDSync={active:ACTIVE,dirty(){},appReady(){},start:async()=>{},chipClick(){},sync(){},switchAccount(){},panelHtml:()=>'',statusText:''};
+  window.MDSync={active:ACTIVE,backup:async()=>({ok:false,msg:'nur über https'}),backupNow(){},dirty(){},appReady(){},start:async()=>{},chipClick(){},sync(){},switchAccount(){},panelHtml:()=>'',statusText:''};
   if(!ACTIVE)return;
 
   const SCOPE='https://graph.microsoft.com/Sites.ReadWrite.All offline_access openid profile';
@@ -134,6 +141,23 @@
     const it=await g('/drives/'+SS.drive+'/root:/'+fpath(FILES[n].file)+':/content',{method:'PUT',headers:{'Content-Type':'application/json'},body:txt});
     SS.known[n]={eTag:it.eTag,id:it.id,sig:hash(txt)};saveSS();
   }
+  async function backupRun(){
+    return queue(async()=>{
+      try{
+        await token();await ensureDrive();
+        const d=new Date(),pd=n=>String(n).padStart(2,'0');
+        const name=`Matchday-Backup-${d.getFullYear()}-${pd(d.getMonth()+1)}-${pd(d.getDate())}_${pd(d.getHours())}${pd(d.getMinutes())}.json`;
+        const txt=JSON.stringify({state,quickSlots,season,archives});
+        await g('/drives/'+SS.drive+'/root:/'+[CFG.folder,'Backups',name].map(encodeURIComponent).join('/')+':/content',{method:'PUT',headers:{'Content-Type':'application/json'},body:txt});
+        const j=await g('/drives/'+SS.drive+'/root:/'+encodeURIComponent(CFG.folder)+'/Backups:/children?$top=200&$select=id,name,file',{allow404:true});
+        const files=(j?j.value:[]).filter(x=>x.file&&/^Matchday-Backup-.*\.json$/.test(x.name)).sort((a,b)=>b.name.localeCompare(a.name));
+        for(const x of files.slice(10)){try{await g('/drives/'+SS.drive+'/items/'+x.id,{method:'DELETE'})}catch(e){}}
+        try{localStorage.setItem('c-jugend-last-backup',String(Date.now()))}catch(e){}
+        try{updateBackupInfo()}catch(e){}
+        return {ok:true,name,count:Math.min(files.length,10)};
+      }catch(e){return {ok:false,msg:(e&&e.message)||String(e)}}
+    });
+  }
   async function cycle(){
     let changed=false,pushed=0;
     try{
@@ -229,12 +253,18 @@
       await queue(()=>cycle());
     },
     sync(){return queue(()=>cycle())},
+    backup(){return backupRun()},
+    async backupNow(){
+      toast('Backup wird nach SharePoint gespeichert …');
+      const r=await backupRun();
+      toast(r.ok?`Matchday-Backup gespeichert (${r.count} von max. 10 im Ordner „Matchday/Backups“).`:'Backup fehlgeschlagen: '+r.msg);
+    },
     async switchAccount(){
       if(!await askConfirm('Mit einem anderen Microsoft-Konto anmelden?\nDie Daten auf diesem Gerät bleiben erhalten.',{ok:'Konto wechseln'}))return;
       localStorage.removeItem(TK);SS.known={};SS.lastSync=null;saveSS();login('select_account');
     },
     panelHtml(){
-      return `<div class="panel"><h2>☁ Microsoft-365-Sync</h2><div id="mdState" class="mutedtxt">${(MDSync.statusText||'').replace(/</g,'&lt;')}</div><div class="mutedtxt">${who()?'Angemeldet als: '+who().replace(/</g,'&lt;'):'Nicht angemeldet'}</div><div class="row" style="margin-top:8px"><button class="small primary" onclick="MDSync.sync()">Jetzt synchronisieren</button><button class="small muted" onclick="MDSync.switchAccount()">Konto wechseln</button></div></div>`;
+      return `<div class="panel"><h2>☁ Microsoft-365-Sync</h2><div id="mdState" class="mutedtxt">${(MDSync.statusText||'').replace(/</g,'&lt;')}</div><div class="mutedtxt">${who()?'Angemeldet als: '+who().replace(/</g,'&lt;'):'Nicht angemeldet'}</div><div class="row" style="margin-top:8px"><button class="small primary" onclick="MDSync.sync()">Jetzt synchronisieren</button><button class="small muted" onclick="MDSync.backupNow()">☁ Matchday-Backup in SharePoint</button><button class="small muted" onclick="MDSync.switchAccount()">Konto wechseln</button></div></div>`;
     }
   });
   document.addEventListener('visibilitychange',()=>{if(!document.hidden&&appIsReady&&Date.now()-lastPull>30000)queue(()=>cycle())});
@@ -309,14 +339,55 @@ img,video{max-width:100%;height:auto}
 @media (min-width:768px){.md\:text-sm{font-size:.875rem;line-height:1.25rem}}
 #taktikOverlay{position:relative;width:fit-content;max-width:100%;margin:0 auto 6px;padding:3px 5px;background:#0f172ad9;border:1px solid #334155;border-radius:10px}
 body.is-taktik-fullscreen #taktikOverlay{margin-bottom:4px}
+html body.is-taktik-fullscreen #view-tactic{padding-top:0!important;height:100dvh!important}
+html body.is-taktik-fullscreen #view-tactic .panel{display:block!important}
+html body.is-taktik-fullscreen #view-tactic .tk-layout{display:flex!important;justify-content:center;align-items:center;height:100dvh}
+html body.is-taktik-fullscreen #view-tactic .tk-main{display:block}
+html body.is-taktik-fullscreen #view-tactic .taktik-pitch-container{height:min(calc(100dvh - 8px),calc(100vw*1.54))!important;max-height:none!important;max-width:100vw!important;flex:none!important;margin:0!important;aspect-ratio:1/1.54!important;width:auto!important}
+html body.is-taktik-fullscreen #view-tactic .tk-side{display:block;position:fixed;right:8px;top:52px;z-index:60;width:min(330px,62vw);max-height:calc(100dvh - 62px);overflow:auto;background:rgba(15,23,42,.95);border:1px solid #475569;border-radius:12px;padding:10px;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+html body.is-taktik-fullscreen.tk-panel-hidden #view-tactic .tk-side{display:none}
+html body.is-taktik-fullscreen #view-tactic .tk-side2{display:none}
+html body.is-taktik-fullscreen #view-tactic .tk-side .row.spread{flex-direction:column;align-items:stretch;gap:10px}
+html body.is-taktik-fullscreen #view-tactic .tk-modes{flex-wrap:wrap;overflow:visible}
+html body.is-taktik-fullscreen #view-tactic .tk-side button{font-size:17px!important;min-height:44px;padding:8px 12px!important}
+html body.is-taktik-fullscreen #view-tactic .tk-side .slot-btn,body.is-taktik-fullscreen #view-tactic .tk-side #taktikOverlay button{min-height:44px;min-width:44px;height:auto!important;font-size:17px!important}
+html body.is-taktik-fullscreen #view-tactic .tk-side select{font-size:16px!important;min-height:44px;padding:8px!important}
+html body.is-taktik-fullscreen #view-tactic .tk-side #taktikOverlay{margin:8px 0;flex-wrap:wrap}
+html body.is-taktik-fullscreen #view-tactic .tk-side #taktikStatusBanner{font-size:14px}
+html body.is-taktik-fullscreen .player-token{width:56px!important;height:56px!important;font-size:22px!important}
+html body.is-taktik-fullscreen .player-name-label{font-size:15px!important;padding:2px 8px!important}
+@media (max-width:600px){html body.is-taktik-fullscreen .player-token{width:46px!important;height:46px!important;font-size:18px!important}html body.is-taktik-fullscreen .player-name-label{font-size:12px!important}}
+html body.is-taktik-fullscreen #view-tactic .tk-side .flex{flex-wrap:wrap}
+html body.is-taktik-fullscreen #view-tactic .tk-side select{width:100%}
+html body.is-taktik-fullscreen #view-tactic .tk-side .row.spread>div:first-child{flex-direction:column;align-items:stretch;width:100%}
+@media (min-aspect-ratio:23/20){html body.is-taktik-fullscreen #view-tactic .tk-layout{justify-content:flex-start!important;padding-left:8px}}
+.tk-tools-btn{position:fixed;top:10px;right:170px;z-index:1000;display:none}
+body.is-taktik-fullscreen .tk-tools-btn{display:block}
+body.is-taktik-fullscreen .tk-toolbar{display:none}
+html body:not(.is-taktik-fullscreen) #view-tactic .tk-side{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+html body:not(.is-taktik-fullscreen) #view-tactic .tk-side .row.spread{display:contents}
+html body:not(.is-taktik-fullscreen) #view-tactic .tk-side .row.spread>div{margin:0!important}
+html body:not(.is-taktik-fullscreen) #view-tactic .tk-side select{width:auto;max-width:100px;min-height:34px;padding:2px 6px!important;font-size:12px}
+html body:not(.is-taktik-fullscreen) #view-tactic .tk-side #taktikOverlay{display:contents}
+html body:not(.is-taktik-fullscreen) #view-tactic .tk-side .row.spread>div:nth-child(3){display:contents}
+html body:not(.is-taktik-fullscreen) #view-tactic .tk-side .row.spread>div:nth-child(1){order:1}
+html body:not(.is-taktik-fullscreen) #view-tactic .tk-side .row.spread>div:nth-child(2){order:5}
+html body:not(.is-taktik-fullscreen) #view-tactic .tk-side .row.spread>div:nth-child(3)>button:nth-child(1){order:2}
+html body:not(.is-taktik-fullscreen) #view-tactic .tk-side .row.spread>div:nth-child(3)>button:nth-child(4){order:3}
+html body:not(.is-taktik-fullscreen) #view-tactic .tk-side .row.spread>div:nth-child(3)>button:nth-child(5){order:4}
+html body:not(.is-taktik-fullscreen) #view-tactic .tk-side #quickSlotsGroup{order:6;border:0;padding:0}
+html body:not(.is-taktik-fullscreen) #view-tactic .tk-side .row.spread>div:nth-child(3)>button:nth-child(2){order:7}
+html body:not(.is-taktik-fullscreen) #view-tactic .tk-side .row.spread>div:nth-child(3)>button:nth-child(3){order:8}
+html body:not(.is-taktik-fullscreen) #view-tactic .tk-side .row.spread>div:nth-child(3)>button:nth-child(6){order:9}
+html body:not(.is-taktik-fullscreen) #view-tactic .tk-side #taktikOverlay>button{order:10}
+@media (max-width:520px){html body:not(.is-taktik-fullscreen) #view-tactic .mlbl{display:none}html body:not(.is-taktik-fullscreen) #view-tactic .tk-modes button{padding:6px 9px}}
+html body:not(.is-taktik-fullscreen) #view-tactic .tk-side #taktikStatusBanner{flex-basis:100%;margin:0;order:0}
+html body:not(.is-taktik-fullscreen) #view-tactic .tk-side .slot-btn{padding:0 7px}
+html body:not(.is-taktik-fullscreen) #view-tactic .tk-modes{max-width:100%;padding:3px 4px!important}
+.tk-toolbar{margin-bottom:8px}
+body.tk-tools-closed:not(.is-taktik-fullscreen) #view-tactic .tk-side>:not(#taktikStatusBanner){display:none!important}
 @media (min-width:900px) and (orientation:landscape){
   body:not(.is-taktik-fullscreen):has(#view-tactic.active) .container{max-width:1800px}
-  body.is-taktik-fullscreen #view-tactic .taktik-pitch-container{height:calc(100vh - 80px)!important;max-height:none!important;flex:none!important;margin:0!important}
-  body.is-taktik-fullscreen #view-tactic #taktikBenchList{display:flex!important}
-  body.is-taktik-fullscreen #view-tactic .tk-layout{display:grid;grid-template-columns:auto minmax(300px,1fr);grid-template-areas:"main side" "main side2";gap:12px;align-items:start;color:#e5e7eb}
-  body.is-taktik-fullscreen #view-tactic .tk-main{grid-area:main}body.is-taktik-fullscreen #view-tactic .tk-side{grid-area:side}body.is-taktik-fullscreen #view-tactic .tk-side2{grid-area:side2}
-  body.is-taktik-fullscreen #view-tactic .tk-modes{flex-wrap:wrap;overflow:visible}
-  body.is-taktik-fullscreen #view-tactic .tk-side .row.spread{flex-direction:column;align-items:stretch}
   body:not(.is-taktik-fullscreen) #view-tactic .tk-layout{display:grid;grid-template-columns:auto minmax(300px,1fr);grid-template-areas:"main side" "main side2";gap:12px;align-items:start}
   body:not(.is-taktik-fullscreen) #view-tactic .tk-main{grid-area:main}
   body:not(.is-taktik-fullscreen) #view-tactic .tk-side{grid-area:side}
@@ -327,7 +398,6 @@ body.is-taktik-fullscreen #taktikOverlay{margin-bottom:4px}
   body:not(.is-taktik-fullscreen) #view-tactic .tk-side #taktikOverlay{margin:6px 0}
 }
 @media (max-width:899px),(orientation:portrait){
-  body.is-taktik-fullscreen .tk-layout,body.is-taktik-fullscreen .tk-side,body.is-taktik-fullscreen .tk-main,body.is-taktik-fullscreen .tk-side2{display:contents}
   body:not(.is-taktik-fullscreen) #view-tactic .taktik-pitch-container{height:min(86vh,calc((100vw - 28px)*1.54))}
 }
 </style>
@@ -355,7 +425,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .mutedtxt{color:var(--muted)}
 .clock{font-size:clamp(2.7rem,10vw,5.5rem);line-height:1;font-weight:950;letter-spacing:.03em;font-variant-numeric:tabular-nums}
 .clock .extra{font-size:.42em;color:#fbbf24;margin-left:.35em;letter-spacing:0}
-.statusbar{width:calc(100% - 20px);max-width:1180px;margin:0 auto 10px;padding:6px 12px;border-radius:12px;background:#172033;border:1px solid #374151;display:flex;align-items:center;gap:12px;cursor:pointer}
+.sbalert:empty{display:none}
+.statusbar{position:sticky;top:0;z-index:50;width:calc(100% - 20px);max-width:1180px;margin:0 auto 10px;padding:6px 12px;border-radius:12px;background:#172033;border:1px solid #374151;display:flex;align-items:center;gap:12px;cursor:pointer}
 .sbclock{font-size:1.15rem;font-weight:950;font-variant-numeric:tabular-nums}.sbclock.running{color:#4ade80}.sbclock.paused{color:#fbbf24}.sbclock .extra{font-size:.7em;color:#fbbf24;margin-left:4px}
 .sbscore{font-weight:900;margin-left:auto}
 .clockwrap{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
@@ -680,6 +751,7 @@ html.light .dbbar .tr{background:#e2e8f0}
 </header>
 
 <!-- Floating Exit Fullscreen Button für Taktik -->
+<button onclick="document.body.classList.toggle('tk-panel-hidden')" class="tk-tools-btn bg-slate-800/90 text-emerald-300 px-3 py-1.5 rounded-lg text-sm font-bold border border-slate-600 shadow-xl" aria-label="Werkzeuge ein-/ausblenden">⚙ Werkzeuge</button>
 <button onclick="toggleTaktikFullscreen()" class="fullscreen-exit-btn bg-slate-800/90 hover:bg-slate-700 text-amber-300 px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-600 shadow-xl backdrop-blur">
   ✕ Vollbild beenden
 </button>
@@ -749,8 +821,6 @@ html.light .dbbar .tr{background:#e2e8f0}
         <div class="row clocktools">
           <button id="mainToggle" class="primary" onclick="toggleTimer()">▶ Start</button>
           <button class="warning" onclick="halfTime()">Halbzeitwechsel</button>
-          <span style="flex-basis:100%;height:0"></span>
-          <button class="danger" onclick="endMatch()" style="margin-top:8px">Spiel beenden</button>
           <button id="alertBtn" class="small muted" onclick="toggleAlert()" title="Ton und Vibration bei Wechselzeit">🔔 Hinweise: An</button>
         </div>
       </div>
@@ -768,15 +838,6 @@ html.light .dbbar .tr{background:#e2e8f0}
       </div>
     </div>
     <div class="panel">
-      <div class="row spread"><h2>Tore</h2><span id="goalCounts" class="pill"></span></div>
-      <div class="row" style="margin-bottom:10px">
-        <button class="primary" onclick="startGoal()">⚽ Tor für uns</button>
-        <button class="danger" onclick="oppGoal()">🥅 Gegentor</button>
-      </div>
-      <div id="goalPicker"></div>
-      <div id="recentGoals"></div>
-    </div>
-    <div class="panel">
       <div class="row spread"><h2>Live-Wechsel</h2><span id="liveCounts" class="pill"></span></div>
       <div id="liveEndBar" class="row hide" style="margin-top:8px"><span class="mutedtxt" style="font-weight:700">■ Spiel beendet.</span><button class="primary" onclick="resetMatch()">Neues Spiel starten</button><button class="small muted" onclick="undoEnd()">↩ Beenden rückgängig</button></div>
       <div id="liveLockHint" class="mutedtxt hide" style="margin-top:6px;font-weight:700">⏸ Wechsel nur bei laufender Uhr oder in der Halbzeit.</div>
@@ -788,39 +849,50 @@ html.light .dbbar .tr{background:#e2e8f0}
       <p id="liveInstruction" class="mutedtxt" aria-live="polite">Zuerst einen Feldspieler, danach einen Bankspieler antippen.</p>
       <button id="cancelSwap" class="muted hide" onclick="cancelSelection()">Auswahl abbrechen</button>
     </div>
+    <div class="panel">
+      <div class="row spread"><h2>Tore</h2><span id="goalCounts" class="pill"></span></div>
+      <div class="row" style="margin-bottom:10px">
+        <button class="primary" onclick="startGoal()">⚽ Tor für uns</button>
+        <button class="danger" onclick="oppGoal()">🥅 Gegentor</button>
+      </div>
+      <div id="goalPicker"></div>
+      <div id="recentGoals"></div>
+    </div>
     <div class="panel"><h2>Letzte Wechsel</h2><div id="recentLogs"></div></div>
+    <div class="panel" id="endPanel" style="margin-top:28px"><h2>Spielende</h2><div class="mutedtxt" style="margin-bottom:10px">Beendet das Spiel (mit Rückfrage) und übernimmt es in die Saison-Statistik.</div><button class="danger" onclick="endMatch()">■ Spiel beenden</button></div>
   </section>
 
   <!-- TAKTIKTAFEL VIEW -->
   <section id="view-tactic" class="view">
     <div class="panel">
+    <div class="tk-toolbar"><button id="tkToolsToggle" class="small muted" onclick="toggleTkTools()" aria-expanded="true">⚙ Werkzeuge ▴</button></div>
     <div class="tk-layout"><div class="tk-side">
       <div class="row spread flex-wrap items-center gap-2 mb-3">
         <!-- Formations-Selects Heim & Gegner -->
         <div class="flex items-center gap-2">
           <select id="formationHome" onchange="applyTaktikFormation('home', this.value)" class="bg-blue-700 text-white px-2 py-1 rounded text-xs font-semibold border border-blue-500">
-            <option value="">🔵 Heim-Formation</option></select>
+            <option value="">🔵 Heim</option></select>
           <select id="formationAway" onchange="applyTaktikFormation('away', this.value)" class="bg-red-700 text-white px-2 py-1 rounded text-xs font-semibold border border-red-500">
-            <option value="">🔴 Gegner-Formation</option></select>
+            <option value="">🔴 Gegner</option></select>
         </div>
 
         <!-- Moduswahl als Segmented Control -->
         <div class="tk-modes flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-700" style="max-width:100%;overflow-x:auto">
-          <button id="modeBtn-move" onclick="setTaktikMode('move')" class="mode-btn active-mode bg-emerald-600 text-white py-1 px-2.5 rounded-md text-xs font-bold">✋ Verschieben</button>
-          <button id="modeBtn-run" onclick="setTaktikMode('run')" class="mode-btn text-amber-300 py-1 px-2.5 rounded-md text-xs font-bold hover:bg-slate-800">🏃‍♂️ Laufweg</button>
-          <button id="modeBtn-pass" onclick="setTaktikMode('pass')" class="mode-btn text-sky-300 py-1 px-2.5 rounded-md text-xs font-bold hover:bg-slate-800">⚽ Passweg</button>
-          <button id="modeBtn-sub" onclick="setTaktikMode('sub')" class="mode-btn text-purple-300 py-1 px-2.5 rounded-md text-xs font-bold hover:bg-slate-800">🔁 Tausch</button>
-          <button id="modeBtn-edit" onclick="setTaktikMode('edit')" class="mode-btn text-slate-300 py-1 px-2.5 rounded-md text-xs font-bold hover:bg-slate-800">✏️ Namen</button>
+          <button id="modeBtn-move" onclick="setTaktikMode('move')" class="mode-btn active-mode bg-emerald-600 text-white py-1 px-2.5 rounded-md text-xs font-bold">✋<span class="mlbl"> Schieben</span></button>
+          <button id="modeBtn-run" onclick="setTaktikMode('run')" class="mode-btn text-amber-300 py-1 px-2.5 rounded-md text-xs font-bold hover:bg-slate-800">🏃<span class="mlbl"> Lauf</span></button>
+          <button id="modeBtn-pass" onclick="setTaktikMode('pass')" class="mode-btn text-sky-300 py-1 px-2.5 rounded-md text-xs font-bold hover:bg-slate-800">⚽<span class="mlbl"> Pass</span></button>
+          <button id="modeBtn-sub" onclick="setTaktikMode('sub')" class="mode-btn text-purple-300 py-1 px-2.5 rounded-md text-xs font-bold hover:bg-slate-800">🔁<span class="mlbl"> Tausch</span></button>
+          <button id="modeBtn-edit" onclick="setTaktikMode('edit')" class="mode-btn text-slate-300 py-1 px-2.5 rounded-md text-xs font-bold hover:bg-slate-800">✏️<span class="mlbl"> Namen</span></button>
         </div>
 
         <!-- Aktions-Buttons Taktik -->
         <div class="flex items-center gap-1">
           <button onclick="undoLastArrow()" class="bg-slate-700 hover:bg-slate-600 text-amber-300 px-2 py-1 rounded text-xs font-semibold" title="Pfeil zurück">↩️</button>
-          <button onclick="printTaktik()" class="bg-slate-700 hover:bg-slate-600 text-sky-300 px-2 py-1 rounded text-xs font-semibold" title="Taktiktafel inkl. Auswechselspieler drucken">🖨️ Drucken</button>
+          <button onclick="printTaktik()" class="bg-slate-700 hover:bg-slate-600 text-sky-300 px-2 py-1 rounded text-xs font-semibold" title="Taktiktafel inkl. Auswechselspieler drucken">🖨️</button>
           <button onclick="taktikFromLive()" class="bg-slate-700 hover:bg-slate-600 text-emerald-300 px-2 py-1 rounded text-xs font-semibold" title="Vor Spielbeginn: Startelf (Block 1) und Formation aus der Planung. Im Live-Modus: aktuelle Feldbesetzung">📥 Startelf</button>
           <button onclick="clearArrows()" class="bg-amber-700 hover:bg-amber-600 text-white px-2 py-1 rounded text-xs font-semibold" title="Pfeile löschen">🗑️</button>
           <button onclick="toggleAwayTeam()" id="toggleAwayBtn" class="bg-red-800 hover:bg-red-700 text-white px-2 py-1 rounded text-xs font-semibold" title="Gegner ein-/ausblenden">👁️</button>
-          <button onclick="toggleTaktikFullscreen()" class="bg-slate-700 hover:bg-slate-600 text-amber-300 px-2.5 py-1 rounded text-xs font-semibold border border-slate-600 shadow" title="Vollbildmodus">⛶ Vollbild</button>
+          <button onclick="toggleTaktikFullscreen()" class="bg-slate-700 hover:bg-slate-600 text-amber-300 px-2.5 py-1 rounded text-xs font-semibold border border-slate-600 shadow" title="Vollbildmodus">⛶</button>
         </div>
       </div>
 
@@ -886,6 +958,12 @@ html.light .dbbar .tr{background:#e2e8f0}
   <!-- KADER VIEW -->
   <section id="view-squad" class="view">
     <div class="panel">
+      <div class="row spread"><h2>Spielerbestand</h2><span id="squadCount" class="pill"></span></div>
+      <div id="squadStatusSummary" class="mutedtxt" style="margin:6px 0 6px"></div>
+      <div class="row" style="margin-bottom:10px"><button class="small primary" onclick="setOpenToYes()" title="Alle Spieler ohne Rückmeldung auf „Zusage“ setzen (Absagen bleiben)">✓ Offene zusagen</button></div>
+      <div id="squadList" class="grid2"></div>
+    </div>
+    <div class="panel">
       <h2>Kaderverwaltung</h2>
       <p class="mutedtxt">Zentrale Spielerliste. Änderungen wirken sich sofort auf Planung, Live-Wechsel und die Taktiktafel aus.</p>
       <form id="addPlayerForm" class="formrow">
@@ -927,12 +1005,6 @@ html.light .dbbar .tr{background:#e2e8f0}
       <div id="waInfo" class="mutedtxt" style="margin:6px 0"></div>
       <div class="row"><button class="primary" onclick="waCopy()">📋 Kopieren</button><button class="blue" onclick="waOpen()">💬 In WhatsApp öffnen</button></div>
     </details>
-    <div class="panel">
-      <div class="row spread"><h2>Spielerbestand</h2><span id="squadCount" class="pill"></span></div>
-      <div id="squadStatusSummary" class="mutedtxt" style="margin:6px 0 6px"></div>
-      <div class="row" style="margin-bottom:10px"><button class="small primary" onclick="setOpenToYes()" title="Alle Spieler ohne Rückmeldung auf „Zusage“ setzen (Absagen bleiben)">✓ Offene zusagen</button></div>
-      <div id="squadList" class="grid2"></div>
-    </div>
     <div class="panel" id="archivePanel" style="display:none">
       <div class="row spread"><div><h2>Archiv</h2><div class="mutedtxt">Nicht im Plan, nicht im Live-Tab. Spieler bleiben erhalten und lassen sich wiederherstellen.</div></div><span id="archiveCount" class="pill"></span></div>
       <div id="archiveList" class="grid2" style="margin-top:10px"></div>
@@ -1401,7 +1473,7 @@ async function endMatch(){
   state.game.logs.push({id:idgen(),type:'end',half:state.game.half,seconds:state.game.elapsed,text:'Spiel beendet'});
   saveState();renderAll();toast('Spiel beendet.');
   await autoSeasonAdd();
-  setTimeout(async()=>{const t=lastBackupTime();if(!t||Date.now()-t>3600000){if(await askConfirm(`Spiel beendet. Jetzt ein Backup speichern?\n(Letztes Backup: ${agoText(t)})`,{ok:'Backup speichern',cancel:'Später'}))exportBackup()}},700);
+  setTimeout(async()=>{if(MDSync.active){const r=await MDSync.backup();if(r&&r.ok){toast('Matchday-Backup in SharePoint gespeichert.');return}}const t=lastBackupTime();if(!t||Date.now()-t>3600000){if(await askConfirm(`Spiel beendet. Jetzt ein Backup speichern?\n(Letztes Backup: ${agoText(t)})`,{ok:'Backup speichern',cancel:'Später'}))exportBackup()}},700);
 }
 
 function undoEnd(){
@@ -1467,11 +1539,18 @@ function selectLivePlayer(id){
 
 function cancelSelection(){selectedOut=null;renderLive()}
 
+(function(){
+  try{
+    const el=document.querySelector('#view-live .clockwrap');
+    if(el&&'IntersectionObserver' in window)new IntersectionObserver(es=>{window.__clockVisible=es[0].isIntersecting;try{updateStatusBar()}catch(e){}},{threshold:0.1}).observe(el);
+    else window.__clockVisible=true;
+  }catch(e){window.__clockVisible=true}
+})();
 function updateStatusBar(){
   const sb=$('statusbar');if(!sb)return;
   const g=state.game,onLive=$('view-live').classList.contains('active');
   const onHome=$('view-home').classList.contains('active');
-  const show=!onLive&&!onHome&&!g.ended&&(g.running||g.elapsed>0);
+  const show=(!onLive||!window.__clockVisible)&&!onHome&&!g.ended&&(g.running||g.elapsed>0);
   sb.classList.toggle('hide',!show);
   if(!show)return;
   $('sbClock').innerHTML=clockHTML(g);$('sbClock').className='sbclock '+(g.running?'running':'paused');
@@ -1526,8 +1605,11 @@ function quickGoal(id){
   toast(`Tor: ${p.name} – jetzt Vorlage wählen`);
 }
 function cancelGoal(){goalFlow=null;renderGoals()}
+function askAssist(){try{return localStorage.getItem('md-ask-assist')!=='0'}catch(e){return true}}
+function setAskAssist(v){try{localStorage.setItem('md-ask-assist',v?'1':'0')}catch(e){}}
 function pickScorer(id){
   if(id==='own'){finishGoal(null,true);return}
+  if(!askAssist()){goalFlow={step:'assist',scorerId:id};finishGoal(null);return}
   goalFlow={step:'assist',scorerId:id};renderGoals();
 }
 function finishGoal(assistId,ownGoal){
@@ -1563,7 +1645,7 @@ function renderGoals(){
   $('goalCounts').textContent=`${Number(g.scoreHome)||0} : ${Number(g.scoreAway)||0}`;
   if(!goalFlow){pick.innerHTML=''}
   else if(goalFlow.step==='scorer'){
-    pick.innerHTML=`<div class="notice"><b>Wer hat das Tor geschossen?</b></div><div class="benchlist">`+field.map(p=>`<button class="playerbtn" onclick="pickScorer('${p.id}')"><span class="num">#${p.number}</span><span class="pname">${esc(p.name)}</span></button>`).join('')+`<button class="playerbtn" onclick="pickScorer('own')"><span class="pname">Eigentor Gegner</span></button></div><button class="muted" style="margin-top:8px" onclick="cancelGoal()">Abbrechen</button>`;
+    pick.innerHTML=`<div class="notice"><b>Wer hat das Tor geschossen?</b><div style="margin-top:6px"><label style="display:inline-flex;gap:8px;align-items:center;font-weight:600;cursor:pointer"><input type="checkbox" ${askAssist()?'checked':''} onchange="setAskAssist(this.checked)" style="width:20px;height:20px"> danach nach Vorlage fragen</label></div></div><div class="benchlist">`+field.map(p=>`<button class="playerbtn" onclick="pickScorer('${p.id}')"><span class="num">#${p.number}</span><span class="pname">${esc(p.name)}</span></button>`).join('')+`<button class="playerbtn" onclick="pickScorer('own')"><span class="pname">Eigentor Gegner</span></button></div><button class="muted" style="margin-top:8px" onclick="cancelGoal()">Abbrechen</button>`;
   }else{
     const sc=player(goalFlow.scorerId);
     pick.innerHTML=`<div class="notice"><b>Tor: #${esc(sc?.number)} ${esc(sc?.name)}</b> · Wer hat vorgelegt?</div><div class="benchlist">`+field.filter(p=>p.id!==goalFlow.scorerId).map(p=>`<button class="playerbtn" onclick="finishGoal('${p.id}')"><span class="num">#${p.number}</span><span class="pname">${esc(p.name)}</span></button>`).join('')+`<button class="playerbtn" onclick="finishGoal(null)"><span class="pname">Ohne Vorlage</span></button></div><button class="muted" style="margin-top:8px" onclick="cancelGoal()">Abbrechen</button>`;
@@ -1684,8 +1766,8 @@ function blockArr(i){return state.plan[i]||[]}
 function fillFormationSelects(){
   const fill=(el,opts,keep,ph)=>{if(!el)return;const sig=opts.join('|');if(el.dataset.sig===sig)return;el.dataset.sig=sig;el.innerHTML=(ph?`<option value="">${ph}</option>`:'')+opts.map(o=>`<option value="${o}">${o}</option>`).join('')};
   fill($('formation'),MODE.forms,null,'');
-  fill($('formationHome'),MODE.tforms,null,'🔵 Heim-Formation');
-  fill($('formationAway'),MODE.tforms,null,'🔴 Gegner-Formation');
+  fill($('formationHome'),MODE.tforms,null,'🔵 Heim');
+  fill($('formationAway'),MODE.tforms,null,'🔴 Gegner');
 }
 function updateModeUI(){
   const set=(id,t)=>{const e=$(id);if(e)e.textContent=t};
@@ -2218,8 +2300,24 @@ function undoLastArrow(){ if(taktikArrows.length){taktikArrows.pop(); renderTakt
 function clearArrows(){ taktikArrows=[]; renderTaktikArrows(); }
 function toggleAwayTeam(){ taktikAwayVisible=!taktikAwayVisible; $('toggleAwayBtn').innerText = taktikAwayVisible?"👁️":"🙈"; renderTaktikPitch(); }
 
+function tkToolsUi(){
+  const closed=document.body.classList.contains('tk-tools-closed'),b=document.getElementById('tkToolsToggle');
+  if(b){b.textContent=closed?'⚙ Werkzeuge ▾':'⚙ Werkzeuge ▴';b.setAttribute('aria-expanded',closed?'false':'true')}
+}
+function toggleTkTools(){
+  const closed=document.body.classList.toggle('tk-tools-closed');
+  try{localStorage.setItem('md-tk-tools',closed?'0':'1')}catch(e){}
+  tkToolsUi();
+}
+(function(){
+  let v=null;try{v=localStorage.getItem('md-tk-tools')}catch(e){}
+  const closed=v===null?innerWidth<900:v==='0';
+  document.body.classList.toggle('tk-tools-closed',closed);
+  document.addEventListener('DOMContentLoaded',tkToolsUi);tkToolsUi();
+})();
 function toggleTaktikFullscreen() {
-  document.body.classList.toggle('is-taktik-fullscreen');
+  const on=document.body.classList.toggle('is-taktik-fullscreen');
+  if(on)document.body.classList.toggle('tk-panel-hidden',innerWidth<innerHeight*1.15);
 }
 
 function updateTransform(){
@@ -2426,7 +2524,7 @@ function renderDashboard(){
   const rows=avail.map(p=>({p,min:plannedSeconds(p.id)/60})).sort((a,b)=>b.min-a.min||a.p.number-b.p.number);
   const total=WINDOWS.length*10*FIELDN,avg=avail.length?total/avail.length:0;
   const maxMin=Math.max(1,...rows.map(r=>r.min),MODE.halfMin*2);
-  html+=`<div class="panel"><h2>Spielzeit laut Plan</h2>${rows.length?`<div class="mutedtxt">Ø ${Math.round(avg)} Min je Spieler</div><div class="dbbars">${rows.map(r=>`<div class="dbbar${r.min===0?' zero':r.min<avg*0.6?' low':''}"><span class="nm">#${r.p.number} ${esc(r.p.name)}</span><span class="tr"><span class="fl" style="display:block;width:${Math.round(r.min/maxMin*100)}%"></span></span><span class="mn">${r.min}'</span></div>`).join('')}</div>`:'<div class="empty">Noch keine Spieler im Kader.</div>'}<div class="row" style="margin-top:10px"><button class="small muted" onclick="showView('plan')">Plan öffnen</button></div></div>`;
+  html+=`<details class="panel" id="foldDbPlan"${(()=>{try{return localStorage.getItem('md-fold-foldDbPlan')==='1'?' open':''}catch(e){return''}})()} ontoggle="try{localStorage.setItem('md-fold-foldDbPlan',this.open?'1':'0')}catch(e){}"><summary style="cursor:pointer;font-weight:900;font-size:1.05rem">Spielzeit laut Plan</summary>${rows.length?`<div class="mutedtxt">Ø ${Math.round(avg)} Min je Spieler</div><div class="dbbars">${rows.map(r=>`<div class="dbbar${r.min===0?' zero':r.min<avg*0.6?' low':''}"><span class="nm">#${r.p.number} ${esc(r.p.name)}</span><span class="tr"><span class="fl" style="display:block;width:${Math.round(r.min/maxMin*100)}%"></span></span><span class="mn">${r.min}'</span></div>`).join('')}</div>`:'<div class="empty">Noch keine Spieler im Kader.</div>'}<div class="row" style="margin-top:10px"><button class="small muted" onclick="showView('plan')">Plan öffnen</button></div></details>`;
   // Kachel 3: Saison
   const ss=dbSeasonSummary();
   html+=`<div class="panel"><h2>Saison</h2>${ss.n?`<div class="dbstat"><span><span class="dbbig">${ss.n}</span> <span class="mutedtxt">Spiele</span></span><span><b>${ss.w}S · ${ss.d}U · ${ss.l}N</b><br><span class="mutedtxt">Tore ${ss.gf}:${ss.ga}</span></span></div><div class="mutedtxt" style="margin-top:8px">Top-Torschütze: <b>${esc(ss.scorer)}</b><br>Meiste Vorlagen: <b>${esc(ss.assist)}</b></div>`:'<div class="empty">Noch keine Spiele in der aktuellen Saison.</div>'}<div class="row" style="margin-top:10px"><button class="small muted" onclick="showView('season')">Zur Saison</button></div></div>`;
@@ -2662,7 +2760,7 @@ function exportBackup(){
   const data = { state, quickSlots, season, archives };
   const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-  a.download = `c-jugend-trainer-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.download = `Matchday-Backup-${new Date().toISOString().slice(0,10)}.json`;
   a.click(); toast('Backup erstellt.');
   try{localStorage.setItem(BK_KEY,String(Date.now()))}catch(e){}
   updateBackupInfo();
@@ -3246,6 +3344,22 @@ setupQuickSlots();
   try{await MDSync.start()}catch(e){console.error(e)}
   init();
   MDSync.appReady();
+})();
+</script>
+<script>
+/* Offline-App: Service Worker nur über https bzw. localhost (nicht bei file://) */
+(function(){
+  try{
+    if(!('serviceWorker' in navigator))return;
+    if(!(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'))return;
+    window.addEventListener('load',function(){
+      navigator.serviceWorker.register('sw.js').then(function(){return navigator.serviceWorker.ready}).then(function(){
+        var first=false;try{first=!localStorage.getItem('md-offline-ready');localStorage.setItem('md-offline-ready','1')}catch(e){}
+        window.__offlineReady=true;
+        if(first&&typeof toast==='function')toast('Offline bereit – das Tool startet jetzt auch ohne Netz.');
+      }).catch(function(){});
+    });
+  }catch(e){}
 })();
 </script>
 </body>

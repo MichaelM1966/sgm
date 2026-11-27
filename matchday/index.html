@@ -273,7 +273,7 @@
 })();
 </script>
 
-<title>C-Jugend · Matchday & Taktik Pro</title>
+<title>Matchday & Taktik Pro</title>
 <style id="tw-local">
 /* Lokales CSS statt Tailwind-CDN (Preflight + genutzte Utility-Klassen, Tailwind-3-Werte) */
 *,::before,::after{box-sizing:border-box;border-width:0;border-style:solid;border-color:var(--text);--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000}
@@ -300,7 +300,7 @@ img,video{max-width:100%;height:auto}
 [hidden]{display:none}
 
 .absolute{position:absolute}.relative{position:relative}
-.inset-0{inset:0}.bottom-2{bottom:.5rem}.right-2{right:.5rem}.z-20{z-index:20}
+.inset-0{inset:0}
 .flex{display:flex}.hidden{display:none}.flex-col{flex-direction:column}.flex-wrap{flex-wrap:wrap}
 .items-center{align-items:center}.justify-between{justify-content:space-between}.justify-center{justify-content:center}
 .gap-0\.5{gap:.125rem}.gap-1{gap:.25rem}.gap-1\.5{gap:.375rem}.gap-2{gap:.5rem}
@@ -726,7 +726,7 @@ html.light .dbbar .tr{background:#e2e8f0}
 <body>
 <header class="apphead">
   <div class="headrow">
-    <div class="brand">⚽ <span id="brandAge">C-JUGEND</span> · MATCHDAY & TAKTIK PRO <span id="brandMin" style="color:#4ade80">70'</span><small>Einheitliches Trainer-Tool</small></div>
+    <div class="brand">⚽ <span id="brandAge" hidden></span>MATCHDAY & TAKTIK PRO <span id="brandMin" style="color:#4ade80">70'</span><small>Einheitliches Trainer-Tool</small></div>
     <div class="row">
       <button id="syncChip" class="small muted" style="display:none" onclick="MDSync.chipClick()" title="Microsoft 365 – antippen zum Synchronisieren">☁ …</button>
       <span id="saveStatus" class="status">● Gespeichert</span>
@@ -882,7 +882,6 @@ html.light .dbbar .tr{background:#e2e8f0}
           <button id="modeBtn-run" onclick="setTaktikMode('run')" class="mode-btn text-amber-300 py-1 px-2.5 rounded-md text-xs font-bold hover:bg-slate-800">🏃<span class="mlbl"> Lauf</span></button>
           <button id="modeBtn-pass" onclick="setTaktikMode('pass')" class="mode-btn text-sky-300 py-1 px-2.5 rounded-md text-xs font-bold hover:bg-slate-800">⚽<span class="mlbl"> Pass</span></button>
           <button id="modeBtn-sub" onclick="setTaktikMode('sub')" class="mode-btn text-purple-300 py-1 px-2.5 rounded-md text-xs font-bold hover:bg-slate-800">🔁<span class="mlbl"> Tausch</span></button>
-          <button id="modeBtn-edit" onclick="setTaktikMode('edit')" class="mode-btn text-slate-300 py-1 px-2.5 rounded-md text-xs font-bold hover:bg-slate-800">✏️<span class="mlbl"> Namen</span></button>
         </div>
 
         <!-- Aktions-Buttons Taktik -->
@@ -1114,7 +1113,7 @@ html.light .dbbar .tr{background:#e2e8f0}
 </main>
 
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
-<div class="footer"><span id="footAge">C-Jugend</span> Matchday & Taktik Pro · Lokale Speicherung im Browser</div>
+<div class="footer"><span id="footAge" hidden></span>Matchday & Taktik Pro · Lokale Speicherung im Browser</div>
 
 <script>
 'use strict';
@@ -1773,7 +1772,7 @@ function updateModeUI(){
   const set=(id,t)=>{const e=$(id);if(e)e.textContent=t};
   set('brandAge',MODE.name.toUpperCase());set('brandMin',`${MODE.halfMin*2}'`);set('footAge',MODE.name);
   set('planSub',`${WINDOWS.length} Zeitblöcke · ${MODE.halfMin*2} Minuten · ${FIELDN} Feldspieler (${MODE.short})`);
-  document.title=`${MODE.name} · Matchday & Taktik Pro`;
+  document.title='Matchday & Taktik Pro';
   if($('modeSel'))$('modeSel').value=MODE.key;
   fillFormationSelects();
 }
@@ -2082,14 +2081,13 @@ function syncTaktikPlayers(){
 
 function setTaktikMode(mode){
   taktikMode = mode; taktikActiveActor = null;
-  ['move','run','pass','sub','edit'].forEach(m=>{
+  ['move','run','pass','sub'].forEach(m=>{
     const btn = document.getElementById('modeBtn-'+m);
     if(btn){
       let activeBg = 'bg-emerald-600 text-white';
       if(m==='run') activeBg = 'bg-amber-500 text-slate-950';
       else if(m==='pass') activeBg = 'bg-blue-600 text-white';
       else if(m==='sub') activeBg = 'bg-purple-600 text-white';
-      else if(m==='edit') activeBg = 'bg-slate-600 text-white';
       btn.className = 'mode-btn py-1 px-2.5 rounded-md text-xs font-bold flex items-center gap-1 transition ' + (m===mode ? activeBg+' shadow' : 'text-slate-300 hover:bg-slate-800');
     }
   });
@@ -2104,7 +2102,6 @@ function updateTaktikBanner(){
   if(taktikMode==='run') banner.innerHTML = taktikActiveActor ? `🏃‍♂️ Laufweg aktiv (#${taktikActiveActor.number}): Ziel auf Feld antippen.` : `🏃‍♂️ Modus Laufweg: Spieler auf Feld antippen.`;
   else if(taktikMode==='pass') banner.innerHTML = taktikActiveActor ? `⚽ Passweg aktiv: Passziel antippen.` : `⚽ Modus Passweg: Ball oder Spieler antippen.`;
   else if(taktikMode==='sub') banner.innerHTML = taktikActiveActor ? `🔁 Gewählt: #${taktikActiveActor.number}. Zweiten Spieler oder Bank antippen.` : `🔁 Modus Tausch: Spieler auf Feld antippen.`;
-  else if(taktikMode==='edit') banner.innerHTML = `✏️ Modus Bearbeiten: Spieler antippen, um Nummer/Namen zu ändern.`;
 }
 
 function applyTaktikFormation(team, key){
@@ -2202,16 +2199,6 @@ function renderTaktikPitch(){
           taktikActiveActor.x=p.x; taktikActiveActor.y=p.y; p.x=tx; p.y=ty;
           taktikActiveActor=null; updateTaktikBanner(); renderTaktikPitch();
         }
-      }else if(taktikMode==='edit'){
-        if(p.team==='ball') return;
-        (async()=>{
-          const newName = await askPrompt('Name:', p.name);
-          if(newName!==null) p.name=newName.trim();
-          const newNum = await askPrompt('Nummer:', p.number);
-          if(newNum!==null) p.number=newNum.trim();
-          if(p.team==='home') delete p.squadId;
-          renderTaktikPitch();
-        })();
       }
     });
 

@@ -1113,10 +1113,11 @@ html.light .dbbar .tr{background:#e2e8f0}
 </main>
 
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
-<div class="footer"><span id="footAge" hidden></span>Matchday & Taktik Pro · Lokale Speicherung im Browser</div>
+<div class="footer"><span id="footAge" hidden></span>Matchday & Taktik Pro · Version <span id="footVer"></span> · Lokale Speicherung im Browser</div>
 
 <script>
 'use strict';
+const APP_VERSION='2.57';
 const KEY='c-jugend-master-tool-v1', MAXCLOCK=6*3600;
 // Spielformen: C-Jugend = 11er, 2×35 Min · D-Jugend = 9er, 2×30 Min (Blöcke à 10 Min)
 const MODES={
@@ -1223,6 +1224,7 @@ function foldInit(){
 }
 function init(){
   foldInit();
+  $('footVer').textContent=APP_VERSION;
   let loaded=null;
   try{loaded=JSON.parse(localStorage.getItem(KEY))}catch(e){}
   state=loaded?normalizeState(loaded):blankState();
@@ -2520,7 +2522,7 @@ function renderDashboard(){
   if(!avail.length)warns.push('Noch kein Spieler zugesagt – im Tab Kader Zusagen eintragen, dann erscheinen sie in Plan, Live und Taktik.');
   else if(avail.length<FIELDN)warns.push(`Nur ${avail.length} zugesagte Spieler – für ${FIELDN} Feldspieler zu wenig.`);
   if(!g.ended&&avail.length&&(!g.captainId||!g.jerseyId)&&gameNotStarted())warns.push('Kapitän und/oder Trikotdienst noch nicht festgelegt (Kapitän: Tab Kader ©, Trikotdienst: Auswertung).');
-  if(g.ended&&!g.exported)warns.push('Spiel beendet – Spielstatistik noch nicht exportiert (Tab Auswertung).');
+  if(g.ended&&!g.exported)warns.push('Spiel beendet – noch nicht in die Saison übernommen (Tab Auswertung: JSON-Export, danach im Tab Saison importieren).');
   const bt=lastBackupTime();
   if(state.players.length&&(!bt||Date.now()-bt>14*86400000))warns.push(`Letztes Backup: ${agoText(bt)}.`);
   html+=`<div class="panel"><h2>Hinweise</h2>${warns.length?warns.map(w=>`<div class="dbwarn">⚠ ${esc(w)}</div>`).join(''):'<div class="dbok">✓ Alles in Ordnung.</div>'}</div>`;
@@ -2901,10 +2903,11 @@ function initTaktikListeners() {
   });
 }
 
+function localDate(){const d=new Date(),p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`}
 function buildMatchData(opponent,competition,result){
-  const today=new Date().toISOString().slice(0,10);
+  const today=localDate();
   const players=rosterSorted().map(p=>({id:p.id,number:p.number,name:p.name,
-    starter:state.plan[0]?state.plan[0].slice(0,11).includes(p.id):p.onField,
+    starter:state.plan[0]?state.plan[0].slice(0,FIELDN).includes(p.id):p.onField,
     seconds:Math.round(p.seconds),minutes:Math.round(p.seconds/60),goals:goalsOf(p.id),assists:assistsOf(p.id),
     rsvp:rsvpOf(p),excluded:!!p.excluded,captain:p.id===state.game.captainId,jerseyDuty:p.id===state.game.jerseyId}));
   return {format:'c-jugend-match-v1',
@@ -2926,57 +2929,24 @@ async function autoSeasonAdd(){
   const d=buildMatchData(String(opp),String(comp),res);
   if(!validMatch(d))return;
   snapAdd('auto','Vor Übernahme Spiel');
-  const i=season.findIndex(x=>x.meta.matchId===d.meta.matchId);
+  let i=season.findIndex(x=>x.meta.matchId===d.meta.matchId);
+  if(i>=0){
+    const rpl=await askConfirm(`Für ${d.meta.date} ist bereits ein Spiel gegen „${d.meta.opponent}“ gespeichert.\n\nErsetzen oder als weiteres Spiel zusätzlich speichern?`,{ok:'Ersetzen',cancel:'Zusätzlich speichern'});
+    if(!rpl){const base=d.meta.matchId;let n=2;const ids=new Set(allMatches().map(x=>x.meta.matchId));while(ids.has(`${base}_${n}`))n++;d.meta.matchId=`${base}_${n}`;i=-1}
+  }
   if(i>=0)season[i]=d;else season.push(d);
   g.exported=true;g.seasonId=d.meta.matchId;
   saveSeason();saveState();renderAll();renderSeason();
   toast(`In Saison übernommen: ${d.meta.opponent} ${res}${state.game.captainId?' · Kapitän erfasst':''}.`);
 }
 async function exportMatchStatsJSON() {
-  const ps = rosterSorted();
   const opponent = await askPrompt("Gegner für die Spielstatistik eingeben (z.B. SV Musterstadt):", "Gegner");
   if (!opponent || !opponent.trim()) return;
   
   const competition = (await askPrompt("Wettbewerb wählen (Punktspiel, Pokal, Testspiel):", "Punktspiel")) || "Punktspiel";
   const result = (await askPrompt("Spielstand (z.B. 3:1):", `${state.game.scoreHome || 0}:${state.game.scoreAway || 0}`)) || "0:0";
-  const today = new Date().toISOString().slice(0, 10);
-
-  const playerStats = ps.map(p => ({
-    id: p.id,
-    number: p.number,
-    name: p.name,
-    starter: state.plan[0] ? state.plan[0].slice(0, 11).includes(p.id) : p.onField,
-    seconds: Math.round(p.seconds),
-    minutes: Math.round(p.seconds / 60),
-    goals: goalsOf(p.id),
-    assists: assistsOf(p.id),
-    rsvp: rsvpOf(p),
-    excluded: !!p.excluded,
-    captain: p.id === state.game.captainId,
-    jerseyDuty: p.id === state.game.jerseyId
-  }));
-
-  const matchData = {
-    format: "c-jugend-match-v1",
-    meta: {
-      mode: MODE.key,
-      matchId: `${today}_${opponent.trim().toLowerCase().replace(/\s+/g, '-')}`,
-      date: today,
-      opponent: opponent.trim(),
-      competition: competition.trim(),
-      result: result.trim(),
-      durationSec: Math.round(totalPlayed(state.game))
-    },
-    players: playerStats,
-    goals: state.game.logs.filter(l => l.type === 'goal').map(l => ({half: l.half, seconds: l.seconds, scorerId: l.scorerId, assistId: l.assistId})),
-    opponentGoals: state.game.logs.filter(l => l.type === 'oppgoal').length,
-    subs: state.game.logs.filter(l => l.type === 'sub').map(l => ({
-      half: l.half,
-      seconds: l.seconds,
-      outId: l.outId,
-      inId: l.inId
-    }))
-  };
+  const matchData = buildMatchData(opponent, competition, result);
+  const today = matchData.meta.date;
 
   const blob = new Blob([JSON.stringify(matchData, null, 2)], {type: 'application/json'});
   const a = document.createElement('a');

@@ -2,7 +2,7 @@
    Strategie: Seite zuerst aus dem Netz (damit Updates sofort ankommen), bei fehlender
    Verbindung aus dem Zwischenspeicher. Fremde Adressen (Microsoft-Anmeldung, Graph,
    SharePoint) werden nie angefasst. Bei neuer Version CACHE hochzählen. */
-const CACHE = 'matchday-v61';
+const CACHE = 'matchday-v63';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {

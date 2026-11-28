@@ -32,7 +32,7 @@
   const ACTIVE=location.protocol==='https:'||['localhost','127.0.0.1'].includes(location.hostname);
   const FILES={state:{file:'state.json',key:'c-jugend-master-tool-v1'},season:{file:'season.json',key:'c-jugend-season-v1'},archive:{file:'archive.json',key:'c-jugend-season-archive-v1'},slots:{file:'slots.json',key:'c_jugend_quick_slots'}};
   const NAMES=Object.keys(FILES);
-  window.MDSync={active:ACTIVE,backup:async()=>({ok:false,msg:'nur über https'}),backupNow(){},listBackups:async()=>[],fetchBackup:async()=>'',dirty(){},appReady(){},start:async()=>{},chipClick(){},sync(){},switchAccount(){},panelHtml:()=>'',statusText:''};
+  window.MDSync={active:ACTIVE,backup:async()=>({ok:false,msg:'nur über https'}),backupNow(){},openFolder(){},listBackups:async()=>[],fetchBackup:async()=>'',dirty(){},appReady(){},start:async()=>{},chipClick(){},sync(){},switchAccount(){},panelHtml:()=>'',statusText:''};
   if(!ACTIVE)return;
 
   const SCOPE='https://graph.microsoft.com/Sites.ReadWrite.All offline_access openid profile';
@@ -254,6 +254,16 @@
     },
     sync(){return queue(()=>cycle())},
     backup(){return backupRun()},
+    openFolder(){
+      const w=window.open('','_blank');
+      return queue(async()=>{
+        try{
+          await token();await ensureDrive();
+          const it=await g('/drives/'+SS.drive+'/root:/'+encodeURIComponent(CFG.folder)+'/Backups?$select=webUrl',{allow404:true})||await g('/drives/'+SS.drive+'/root:/'+encodeURIComponent(CFG.folder)+'?$select=webUrl');
+          if(it&&it.webUrl&&w)w.location.href=it.webUrl;else{if(w)w.close();toast('Ordner nicht gefunden – erst ein Backup speichern.')}
+        }catch(e){if(w)w.close();toast('Ordner konnte nicht geöffnet werden: '+((e&&e.message)||e))}
+      });
+    },
     listBackups(){
       return queue(async()=>{
         await token();await ensureDrive();
@@ -278,7 +288,7 @@
       localStorage.removeItem(TK);SS.known={};SS.lastSync=null;saveSS();login('select_account');
     },
     panelHtml(){
-      return `<div class="panel"><h2>☁ Microsoft-365-Sync</h2><div id="mdState" class="mutedtxt">${(MDSync.statusText||'').replace(/</g,'&lt;')}</div><div class="mutedtxt">${who()?'Angemeldet als: '+who().replace(/</g,'&lt;'):'Nicht angemeldet'}</div><div class="row" style="margin-top:8px"><button class="small primary" onclick="MDSync.sync()">Jetzt synchronisieren</button><button class="small muted" onclick="MDSync.backupNow()">☁ Matchday-Backup in SharePoint</button><button class="small muted" onclick="MDSync.switchAccount()">Konto wechseln</button></div></div>`;
+      return `<div id="mdState" class="mutedtxt">${(MDSync.statusText||'').replace(/</g,'&lt;')}</div><div class="mutedtxt">${who()?'Angemeldet als: '+who().replace(/</g,'&lt;'):'Nicht angemeldet'}</div><div class="row" style="margin-top:8px"><button class="small primary" onclick="MDSync.sync()">Jetzt synchronisieren</button><button class="small muted" onclick="MDSync.switchAccount()">Konto wechseln</button></div>`;
     }
   });
   document.addEventListener('visibilitychange',()=>{if(!document.hidden&&appIsReady&&Date.now()-lastPull>30000)queue(()=>cycle())});
@@ -693,6 +703,12 @@ html.light .mutedtxt{color:var(--muted)}
 .waform{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:8px}
 .waform label{display:grid;gap:4px;font-size:.82rem;font-weight:700;margin:0}
 #waText{font:inherit;font-size:.92rem;line-height:1.45;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--text);resize:vertical}
+#moreGrid h2,#moreAbout h2{margin:0 0 8px;font-size:1.05rem;font-weight:900}
+.mblock{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:10px;background:var(--panel2)}
+.mblock h3{margin:0 0 4px;font-weight:900;font-size:1rem}
+.mtag{font-size:.72rem;font-weight:700;color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:1px 8px;margin-left:6px;vertical-align:middle;white-space:nowrap}
+details.subfold{margin-top:8px}
+details.subfold>summary{cursor:pointer;font-weight:700;padding:6px 0}
 .dbgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:12px}
 .dbgrid>.panel{margin:0}
 .dbgrid h2{margin:0 0 8px;font-size:1.05rem}
@@ -864,12 +880,17 @@ html.light details.hints2{background:#fffbeb}html.light details.hints2 summary{c
 
   <!-- MEHR VIEW -->
   <section id="view-more" class="view">
-    <div id="moreGrid" class="dbgrid"></div>
-    <div class="panel" id="importPanel">
-      <h2>Spieler aus Liste anlegen</h2>
-      <div class="mutedtxt" style="margin:6px 0 8px">Ein Name pro Zeile (oder durch Komma getrennt), optional mit Nummer, z. B. „7 Anna“, „Anna 7“, „7;Anna“ – auch aus Excel oder WhatsApp kopiert. „(TW)“ markiert den Torwart. Bei vorhandenen Namen wird nur die Nummer angepasst (bei Doppelbelegung tauschen beide).</div>
-      <textarea id="bulkNames" rows="6" placeholder="1 Leon (TW)&#10;7 Anna&#10;Ben, Carl, Dora" oninput="bulkHint()" style="width:100%;background:#0b1220;color:#fff;border:1px solid #64748b;border-radius:9px;padding:11px"></textarea>
-      <div class="row" style="margin-top:8px"><button class="primary" onclick="addPlayersBulk()">Spieler anlegen</button><span id="bulkInfo" class="mutedtxt"></span></div>
+    <div class="gcols">
+      <div id="moreGrid"></div>
+      <div>
+        <details class="panel fold" id="importPanel" data-def="0">
+          <summary style="cursor:pointer;font-weight:900;font-size:1.05rem">Spieler aus Liste anlegen</summary>
+          <div class="mutedtxt" style="margin:8px 0">Ein Name pro Zeile (oder durch Komma getrennt), optional mit Nummer, z. B. „7 Anna“, „Anna 7“, „7;Anna“ – auch aus Excel oder WhatsApp kopiert. „(TW)“ markiert den Torwart. Bei vorhandenen Namen wird die Nummer aktualisiert.</div>
+          <textarea id="bulkNames" rows="6" placeholder="1 Leon (TW)&#10;7 Anna&#10;Ben, Carl, Dora" oninput="bulkHint()" style="width:100%;background:#0b1220;color:#fff;border:1px solid #64748b;border-radius:9px;padding:11px"></textarea>
+          <div class="row" style="margin-top:8px"><button class="primary" onclick="addPlayersBulk()">Spieler anlegen</button><span id="bulkInfo" class="mutedtxt"></span></div>
+        </details>
+        <div class="panel" id="moreAbout"></div>
+      </div>
     </div>
   </section>
 
@@ -1198,7 +1219,7 @@ html.light details.hints2{background:#fffbeb}html.light details.hints2 summary{c
 
 <script>
 'use strict';
-const APP_VERSION='2.61';
+const APP_VERSION='2.63';
 const KEY='c-jugend-master-tool-v1', MAXCLOCK=6*3600;
 // Spielformen: C-Jugend = 11er, 2×35 Min · D-Jugend = 9er, 2×30 Min (Blöcke à 10 Min)
 const MODES={
@@ -2624,23 +2645,31 @@ async function spBackupRestore(id,name){
 function spBackupLabel(n){const m=/^Matchday-Backup-(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})\.json$/.exec(n);return m?`${m[3]}.${m[2]}.${m[1]} · ${m[4]}:${m[5]} Uhr`:n}
 function spBackupsHtml(){
   if(!MDSync.active)return '';
-  const rows=spBk.list&&spBk.list.length?spBk.list.map(x=>`<div class="row spread" style="margin-top:6px;gap:6px"><div style="min-width:0"><b>${esc(spBackupLabel(x.name))}</b><div class="mutedtxt">${Math.max(1,Math.round(x.size/1024))} KB</div></div><button class="small primary" onclick="spBackupRestore('${esc(x.id)}','${esc(x.name)}')">Wiederherstellen</button></div>`).join(''):(spBk.list?'<div class="mutedtxt" style="margin-top:8px">Keine Backups im Ordner „Matchday/Backups“.</div>':'');
-  return `<div class="panel"><h2>☁ SharePoint-Backups</h2>
-    <div class="mutedtxt">Die letzten 10 Backups aus „Matchday/Backups“. Wiederherstellen ersetzt den aktuellen Stand (vorher interne Sicherung) und wird beim nächsten Abgleich auch in SharePoint übernommen.</div>
-    <div class="row" style="margin-top:8px"><button class="small primary" onclick="spBackupsLoad()"${spBk.loading?' disabled':''}>${spBk.loading?'Lade …':'Liste laden'}</button><button class="small muted" onclick="MDSync.backupNow()">☁ Jetzt Backup speichern</button></div>
-    ${spBk.err?`<div class="dbwarn" style="margin-top:8px">${esc(spBk.err)}</div>`:''}${rows}</div>`;
+  const rows=spBk.list&&spBk.list.length?spBk.list.map(x=>`<div class="row" style="margin-top:6px;gap:6px;align-items:center"><div style="flex:1;min-width:0"><b>${esc(spBackupLabel(x.name))}</b><div class="mutedtxt">${Math.max(1,Math.round(x.size/1024))} KB</div></div><button class="small primary" onclick="spBackupRestore('${esc(x.id)}','${esc(x.name)}')">Wiederherstellen</button></div>`).join(''):(spBk.list?'<div class="mutedtxt" style="margin-top:8px">Keine Backups im Ordner „Matchday/Backups“.</div>':'');
+  return `<div class="row" style="margin-top:8px"><button class="small primary" onclick="MDSync.backupNow()">☁ Backup jetzt speichern</button><button class="small muted" onclick="spBackupsLoad()"${spBk.loading?' disabled':''}>${spBk.loading?'Lade …':'Backups anzeigen / wiederherstellen'}</button><button class="small muted" onclick="MDSync.openFolder()">📂 Ordner in SharePoint öffnen</button></div>
+    ${spBk.err?`<div class="dbwarn" style="margin-top:8px">${esc(spBk.err)}</div>`:''}${spBk.list?'<div class="mutedtxt" style="margin-top:8px">Letzte 10 Backups. Wiederherstellen ersetzt den aktuellen Stand – vorher wird eine interne Sicherung angelegt.</div>':''}${rows}`;
 }
 function renderMore(){
   const host=$('moreGrid');if(!host)return;
   let ready=false;try{ready=localStorage.getItem('md-offline-ready')==='1'}catch(e){}
-  let html=`<div class="panel"><h2>Sicherung</h2>
-    <div class="mutedtxt">Datei-Backup mit Kader, Plan, Spieldaten, Saison und Taktik-Slots. Beim Einspielen wird der aktuelle Stand vorher intern gesichert.</div>
-    <div class="row" style="margin-top:10px"><button class="small primary" onclick="exportBackup()" style="line-height:1.15">Gesamt-Backup<br><small id="backupInfo" style="font-weight:600;opacity:.85"></small></button><button class="small muted" onclick="document.getElementById('importFile').click()" title="Komplettes Backup einspielen (Kader, Plan, Saison, Taktik-Slots)">Gesamt-Import</button></div></div>`;
-  html+=spBackupsHtml();
-  html+=snapPanelHtml();
-  if(MDSync.active)html+=MDSync.panelHtml();
-  html+=`<div class="panel"><h2>Über</h2><div class="mutedtxt">Matchday &amp; Taktik Pro · Version ${esc(APP_VERSION)}<br>${ready?'✓ Offline-fähig (App ist zwischengespeichert).':'Offline-Zwischenspeicher noch nicht bereit oder nicht verfügbar (nur über https).'}<br>Daten liegen lokal im Browser dieses Geräts${MDSync.active?' und werden per Microsoft-365-Sync abgeglichen':''}.</div></div>`;
+  let html=`<div class="panel"><h2>Sicherung &amp; Wiederherstellung</h2>
+    <div class="mutedtxt">Deine Daten (Kader, Plan, Spieldaten, Saison, Taktik-Slots) können an drei Orten gesichert sein:</div>
+    <div class="mblock"><h3>📱 Auf diesem Gerät <span class="mtag">automatisch</span></h3>
+      <div class="mutedtxt">Die App legt vor riskanten Aktionen selbst eine Kopie im Browser an (Neues Spiel, Import, Löschen, Saisonwechsel). Schnell zurückholbar – aber weg, wenn Browserdaten gelöscht werden.</div>
+      ${snapPanelHtml()}</div>
+    <div class="mblock"><h3>📄 Datei <span class="mtag">von Hand</span></h3>
+      <div class="mutedtxt">Eine Datei zum Aufbewahren oder für ein anderes Gerät.</div>
+      <div class="row" style="margin-top:8px"><button class="small primary" onclick="exportBackup()" style="line-height:1.15">Backup herunterladen<br><small id="backupInfo" style="font-weight:600;opacity:.85"></small></button><button class="small muted" onclick="document.getElementById('importFile').click()" title="Backup-Datei einspielen – ersetzt den aktuellen Stand">Aus Datei einspielen</button></div></div>
+    <div class="mblock"><h3>☁ SharePoint <span class="mtag">Cloud</span></h3>`;
+  if(MDSync.active){
+    html+=`<div class="mutedtxt">Gleicht die Daten automatisch zwischen Geräten ab. Zusätzlich entsteht ein Backup nach „Spiel beenden“ und per Knopf (letzte 10 in Matchday/Backups).</div>${MDSync.panelHtml()}${spBackupsHtml()}`;
+  }else{
+    html+=`<div class="mutedtxt">Nur in der installierten App über https mit Microsoft-Anmeldung verfügbar – in dieser Ansicht nicht aktiv.</div>`;
+  }
+  html+=`</div></div>`;
   host.innerHTML=html;
+  const ab=$('moreAbout');
+  if(ab)ab.innerHTML=`<h2>Über</h2><div class="mutedtxt">Matchday &amp; Taktik Pro · Version ${esc(APP_VERSION)}<br>${ready?'✓ Offline-fähig (App ist zwischengespeichert).':'Offline-Zwischenspeicher noch nicht bereit oder nicht verfügbar (nur über https).'}<br>Daten liegen lokal im Browser dieses Geräts${MDSync.active?' und werden per Microsoft-365-Sync abgeglichen':''}.</div>`;
   updateBackupInfo();
 }
 function renderDashboard(){
@@ -2885,8 +2914,8 @@ function snapPanelHtml(){
   const list=snapLoad();
   const row=x=>`<div class="row" style="margin-top:8px;gap:6px;align-items:center"><div style="flex:1;min-width:0"><b style="overflow-wrap:anywhere">${x.kind==='manual'?'💾':'⏱'} ${esc(x.label)}</b><div class="mutedtxt">${esc(snapTime(x.at))} · ${x.n} Spieler · ${esc((MODES[x.mode]||MODES.c).short)}</div></div><button class="small muted" onclick="snapRestore('${x.id}')">Laden</button><button class="small muted" onclick="snapDelete('${x.id}')" title="Löschen" aria-label="Sicherung löschen">✕</button></div>`;
   const sOpen=(()=>{try{return localStorage.getItem('md-fold-foldSnap')==='1'}catch(e){return false}})();
-  return `<details class="panel"${sOpen?' open':''} ontoggle="try{localStorage.setItem('md-fold-foldSnap',this.open?'1':'0')}catch(e){}"><summary style="cursor:pointer;font-weight:900;font-size:1.05rem">Interne Sicherungen (${list.length})</summary>
-    <div class="mutedtxt">Automatisch vor „Neues Spiel“, Plan-Reset, Import, Saisonwechsel und Löschen (letzte ${SNAP_AUTO}). Eigene Aufstellungen zum Durchtesten: bis zu ${SNAP_MAN}. Liegt im Browser – ersetzt keine Datei-Sicherung.</div>
+  return `<details class="subfold"${sOpen?' open':''} ontoggle="try{localStorage.setItem('md-fold-foldSnap',this.open?'1':'0')}catch(e){}"><summary>Gespeicherte Stände ansehen (${list.length})</summary>
+    <div class="mutedtxt" style="margin-top:6px">⏱ = automatisch (letzte ${SNAP_AUTO}) · 💾 = von dir gesichert (bis zu ${SNAP_MAN}, z. B. zum Durchtesten einer Aufstellung).</div>
     <div class="row" style="margin-top:10px"><button class="small primary" onclick="snapSaveManual()">💾 Aktuellen Stand sichern</button></div>
     ${list.length?list.map(row).join(''):'<div class="mutedtxt" style="margin-top:8px">Noch keine Sicherungen.</div>'}</details>`;
 }

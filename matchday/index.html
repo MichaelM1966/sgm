@@ -32,7 +32,7 @@
   const ACTIVE=location.protocol==='https:'||['localhost','127.0.0.1'].includes(location.hostname);
   const FILES={state:{file:'state.json',key:'c-jugend-master-tool-v1'},season:{file:'season.json',key:'c-jugend-season-v1'},archive:{file:'archive.json',key:'c-jugend-season-archive-v1'},slots:{file:'slots.json',key:'c_jugend_quick_slots'}};
   const NAMES=Object.keys(FILES);
-  window.MDSync={active:ACTIVE,backup:async()=>({ok:false,msg:'nur über https'}),backupNow(){},dirty(){},appReady(){},start:async()=>{},chipClick(){},sync(){},switchAccount(){},panelHtml:()=>'',statusText:''};
+  window.MDSync={active:ACTIVE,backup:async()=>({ok:false,msg:'nur über https'}),backupNow(){},listBackups:async()=>[],fetchBackup:async()=>'',dirty(){},appReady(){},start:async()=>{},chipClick(){},sync(){},switchAccount(){},panelHtml:()=>'',statusText:''};
   if(!ACTIVE)return;
 
   const SCOPE='https://graph.microsoft.com/Sites.ReadWrite.All offline_access openid profile';
@@ -254,6 +254,20 @@
     },
     sync(){return queue(()=>cycle())},
     backup(){return backupRun()},
+    listBackups(){
+      return queue(async()=>{
+        await token();await ensureDrive();
+        const j=await g('/drives/'+SS.drive+'/root:/'+encodeURIComponent(CFG.folder)+'/Backups:/children?$top=200&$select=id,name,file,size',{allow404:true});
+        return (j?j.value:[]).filter(x=>x.file&&/^Matchday-Backup-.*\.json$/.test(x.name)).sort((a,b)=>b.name.localeCompare(a.name)).slice(0,10).map(x=>({id:x.id,name:x.name,size:x.size||0}));
+      });
+    },
+    fetchBackup(id){
+      return queue(async()=>{
+        await token();await ensureDrive();
+        const it=await g('/drives/'+SS.drive+'/items/'+encodeURIComponent(id)+'?$select=id,@microsoft.graph.downloadUrl');
+        return download(it);
+      });
+    },
     async backupNow(){
       toast('Backup wird nach SharePoint gespeichert …');
       const r=await backupRun();
@@ -416,6 +430,11 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .nav{max-width:1200px;margin:auto;padding:0 10px 10px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}.nav::-webkit-scrollbar{display:none}
 .nav button{flex:1 0 auto;white-space:nowrap;background:#1f2937;padding:9px 12px;font-size:.82rem;font-weight:800}
 .nav button.active{background:#166534;border-color:#4ade80;color:#fff}
+.gametabs{max-width:1200px;margin:auto;padding:0 10px 8px;display:flex;gap:6px}
+.gametabs button{flex:1;min-height:42px;padding:6px 8px;font-size:.9rem;font-weight:800;background:#1f2937;border-radius:10px}
+.gametabs button.active{background:#166534;border-color:#4ade80;color:#fff}
+.gametabs.hide{display:none}
+html.light .gametabs button{background:#e2e8f0;color:#0f172a}html.light .gametabs button.active{background:#16a34a;color:#fff;border-color:#15803d}
 .container{max-width:1200px;margin:auto;padding:14px;display:grid;gap:14px}
 .view{display:none;min-width:0}.view.active{display:block}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:14px;box-shadow:0 5px 15px #0002}
@@ -693,7 +712,7 @@ html.light .dbbar .tr{background:#e2e8f0}
 @media(max-width:700px){#view-home .row .small{padding:6px 10px}}
 @media print{
   :root,html.light{--bg:#fff;--panel:#fff;--panel2:#f3f4f6;--line:#999;--text:#000;--muted:#333;--warn:#92400e;--ok:#166534;--bad:#991b1b}
-  body{background:white;color:black}.apphead,.nav,button,.toast,.statusbar,details summary{display:none!important}
+  body{background:white;color:black}.apphead,.nav,.botnav,button,.toast,.statusbar,details summary{display:none!important}
   .view{display:none!important}.view.active{display:block!important}
   .panel{background:white;color:black;border:1px solid #777;break-inside:avoid;box-shadow:none}
   th,td,td:first-child,th:first-child{background:white!important;color:black!important;border-bottom:1px solid #bbb}
@@ -721,6 +740,47 @@ html.light .dbbar .tr{background:#e2e8f0}
   #printTaktik .ptlegend{font-size:8pt;color:#333;margin-top:1.5mm}
   @page{size:A4;margin:10mm}
 }
+/* v2.60: Tab-Leiste unten, schmaler Kopf, Tablet-Layout */
+body{padding-bottom:calc(68px + env(safe-area-inset-bottom))}
+.botnav{position:fixed;left:0;right:0;bottom:0;z-index:60;display:flex;background:#101827f7;backdrop-filter:blur(8px);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);box-shadow:0 -5px 20px #0005}
+.botnav button{flex:1;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;min-height:60px;border:0;border-radius:0;background:transparent;color:#cbd5e1;padding:6px 2px;font-weight:800}
+.botnav .ni{font-size:1.4rem;line-height:1}.botnav .nl{font-size:.76rem}
+.botnav button.active{color:#fff;box-shadow:inset 0 3px 0 #4ade80;background:#14532d55}
+.navbadge{font-size:.76rem;font-weight:900;color:#bbf7d0;white-space:nowrap;font-variant-numeric:tabular-nums}.navbadge.hide{display:none}
+.botnav button.hasbadge .nl{display:none}
+.navbadge.pulse{color:#fde68a;animation:navpulse 1s ease-in-out infinite}
+@keyframes navpulse{50%{opacity:.45}}
+.statusbar{display:none!important}
+body.is-taktik-fullscreen .botnav{display:none!important}
+html.light .botnav{background:#fffffff7}html.light .botnav button{color:#334155}html.light .botnav button.active{color:#0f172a;background:#bbf7d0}html.light .navbadge{color:#166534}
+.toast{bottom:calc(76px + env(safe-area-inset-bottom))}
+.headrow{padding:6px 12px;gap:8px;flex-wrap:nowrap}
+.brand{font-size:1rem;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}.brand small{display:none}
+.headrow>.row{width:auto;flex:none;flex-wrap:nowrap;gap:6px;justify-content:flex-end}
+.headrow>.row .small{padding:4px 10px;min-height:40px}
+.gametabs{padding:0 10px 6px}.gametabs button{min-height:40px}
+@media(max-width:700px){#saveStatus{overflow:hidden;width:30px;max-width:30px;white-space:nowrap;padding:5px 0 5px 9px;justify-content:flex-start}.brand{font-size:.88rem}}
+.gcols{display:grid;gap:12px;grid-template-columns:minmax(0,1fr)}
+.gcol .formrow{grid-template-columns:minmax(0,1fr) 84px}.gcol .formrow>button{grid-column:1/-1}
+.gcol{display:grid;gap:12px;min-width:0;align-content:start}.gcol>.panel,.gcol>details.panel{margin:0}
+@media(min-width:800px){.gcols{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);align-items:start}}
+.rsvplist{display:grid;gap:6px}
+.rsvprow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:6px 8px;border:1px solid #374151;border-left:4px solid #4b5563;background:#172033;border-radius:12px}
+.rsvprow.y{border-left-color:#22c55e}.rsvprow.n{border-left-color:#ef4444}.rsvprow.o{border-left-color:#f59e0b}.rsvprow.off{opacity:.62}
+.rsvprow .rname{flex:1 1 80px;min-width:0;display:flex;flex-direction:column;overflow-wrap:anywhere;font-weight:800;line-height:1.15}.rsvprow .rname small{font-weight:600;font-size:.72rem;color:#9ca3af}
+.rsvprow .rbtns{display:flex;gap:4px;flex:0 0 auto;margin-left:auto}.rsvprow .rname b.nr{color:#fbbf24;margin-right:4px}
+.rsvprow .rb{min-width:42px;min-height:42px;padding:0;font-weight:900;font-size:1rem}
+html.light .rsvprow{background:#f8fafc;border-color:#cbd5e1}
+.dbc-pills{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+details.hints2{margin-top:8px;border:1px solid #92400e;border-radius:10px;background:#422006;padding:6px 10px}details.hints2 summary{cursor:pointer;font-weight:800;color:#fde68a;min-height:32px;display:flex;align-items:center}
+html.light details.hints2{background:#fffbeb}html.light details.hints2 summary{color:#92400e}
+@media(pointer:coarse){
+  .view:not(#view-tactic) button,.view:not(#view-tactic) select,.view:not(#view-tactic) input:not([type=checkbox]):not([type=radio]):not([type=range]){min-height:48px}
+  .view:not(#view-tactic) .rsvprow .rb{min-width:44px;min-height:48px}
+  .view:not(#view-tactic) .row{gap:10px}.rsvplist{gap:8px}
+  .gametabs button{min-height:46px}.headrow>.row .small{min-height:44px}
+}
+@media print{.botnav{display:none!important}}
 </style>
 </head>
 <body>
@@ -734,21 +794,26 @@ html.light .dbbar .tr{background:#e2e8f0}
       <button id="themeBtn" class="small muted" onclick="toggleTheme()" title="Heller / dunkler Modus" aria-label="Heller oder dunkler Modus">☀️</button>
     </div>
   </div>
-  <nav class="nav" aria-label="Hauptnavigation">
-    <button class="active" data-view="home" onclick="showView('home')">🏠 START</button>
-    <button data-view="squad" onclick="showView('squad')">👥 KADER</button>
-    <button data-view="plan" onclick="showView('plan')">📋 PLANUNG</button>
-    <button data-view="tactic" onclick="showView('tactic')">⚽ TAKTIK</button>
-    <button data-view="live" onclick="showView('live')">⏱ LIVE</button>
-    <button data-view="report" onclick="showView('report')">📊 AUSWERTUNG</button>
-    <button data-view="season" onclick="showView('season')">📈 SAISON</button>
-  </nav>
+  <div id="gameTabs" class="gametabs" role="tablist" aria-label="Spiel">
+    <button class="active" data-sub="home" onclick="showView('home')">Aufgebot</button>
+    <button data-sub="plan" onclick="showView('plan')">Plan</button>
+    <button data-sub="live" onclick="showView('live')">Live</button>
+    <button data-sub="report" onclick="showView('report')">Bericht</button>
+  </div>
   <div id="statusbar" class="statusbar hide" onclick="showView('live')" title="Zur Live-Ansicht">
     <span id="sbClock" class="sbclock paused">00:00</span><span id="sbHalf" class="mutedtxt"></span><span id="sbAlert" class="sbalert"></span><span id="sbWake"></span>
     <span id="sbScore" class="sbscore">0:0</span>
     <button id="sbToggle" class="small" style="min-height:34px;padding:4px 12px" onclick="event.stopPropagation();toggleTimer()">▶</button>
   </div>
 </header>
+
+<nav class="botnav" id="mainNav" aria-label="Hauptnavigation">
+  <button class="active" data-view="game" onclick="showView('game')"><span class="ni">🏟</span><span class="nl">Spiel</span><span id="navBadge" class="navbadge hide"></span></button>
+  <button data-view="squad" onclick="showView('squad')"><span class="ni">👥</span><span class="nl">Kader</span></button>
+  <button data-view="season" onclick="showView('season')"><span class="ni">📈</span><span class="nl">Statistik</span></button>
+  <button data-view="tactic" onclick="showView('tactic')"><span class="ni">🎯</span><span class="nl">Taktik</span></button>
+  <button data-view="more" onclick="showView('more')"><span class="ni">⚙️</span><span class="nl">Mehr</span></button>
+</nav>
 
 <!-- Floating Exit Fullscreen Button für Taktik -->
 <button onclick="document.body.classList.toggle('tk-panel-hidden')" class="tk-tools-btn bg-slate-800/90 text-emerald-300 px-3 py-1.5 rounded-lg text-sm font-bold border border-slate-600 shadow-xl" aria-label="Werkzeuge ein-/ausblenden">⚙ Werkzeuge</button>
@@ -760,12 +825,57 @@ html.light .dbbar .tr{background:#e2e8f0}
   <!-- START / DASHBOARD -->
   <section id="view-home" class="view active">
     <div id="dbGrid" class="dbgrid"></div>
+    <div class="gcols">
+      <div class="gcol">
+    <div class="panel">
+      <div class="row spread"><h2>Zu- und Absagen</h2><span id="squadCount" class="pill"></span></div>
+      <div id="squadStatusSummary" class="mutedtxt" style="margin:6px 0 6px"></div>
+      <div class="row" style="margin-bottom:10px"><button class="small primary" onclick="setOpenToYes()" title="Alle Spieler ohne Rückmeldung auf „Zusage“ setzen (Absagen bleiben)">✓ Offene zusagen</button></div>
+      <div id="rsvpList" class="rsvplist"></div>
+    </div>
+      </div>
+      <div class="gcol">
+    <details class="panel fold" id="giPanel" data-def="0">
+      <summary style="cursor:pointer;font-weight:900;font-size:1.05rem">Spieldaten <span id="giSum" class="mutedtxt" style="font-weight:600"></span></summary>
+      <div class="mutedtxt" style="margin-bottom:8px">Gelten für die Spieltag-Übersicht, die WhatsApp-Nachricht und die Übernahme in die Statistik.</div>
+      <div class="waform">
+        <label>Datum<input type="date" id="waDate" oninput="giChanged()"></label>
+        <label>Spielbeginn<input type="time" id="waTime" oninput="giTimeChanged()"></label>
+        <label>Gegner<input type="text" id="waOpp" placeholder="z. B. SGM Iggingen" oninput="giChanged()" maxlength="60"></label>
+        <label>Artikel (WhatsApp)<select id="waArt" onchange="giChanged()"><option value="die">gegen die</option><option value="den">gegen den</option><option value="das">gegen das</option><option value="">gegen</option></select></label>
+        <label>Wettbewerb<select id="giComp" onchange="giChanged()"><option>Punktspiel</option><option>Pokal</option><option>Testspiel</option><option>Turnier</option></select></label>
+        <label>Treffpunkt Uhrzeit<input type="time" id="waMeetTime" oninput="giChanged()"></label>
+        <label>Treffpunkt Ort<input type="text" id="waPlace" placeholder="z. B. Sportplatz Kerkingen" oninput="giChanged()" maxlength="80"></label>
+        <label>Kapitän<select id="giCap" onchange="setGameRole('captain',this.value);renderAll()"></select></label>
+        <label>Trikotdienst<select id="giJer" onchange="setGameRole('jersey',this.value);renderAll()"></select></label>
+      </div>
+    </details>
+    <details class="panel fold" id="waPanel" data-def="0">
+      <summary style="cursor:pointer;font-weight:900;font-size:1.05rem">📣 WhatsApp-Nachricht an die Mannschaft</summary>
+      <div class="mutedtxt" style="margin-bottom:10px">Nimmt die Spieldaten oben und den aktuellen Spieltagskader (Zusagen). Torwart (🧤 oder Platz 1 im Plan) = (TW), Kapitän = (C).</div>
+      <textarea id="waText" rows="16" style="width:100%;margin-top:10px" aria-label="Nachricht (bearbeitbar)"></textarea>
+      <div id="waInfo" class="mutedtxt" style="margin:6px 0"></div>
+      <div class="row"><button class="primary" onclick="waCopy()">📋 Kopieren</button><button class="blue" onclick="waOpen()">💬 In WhatsApp öffnen</button></div>
+    </details>
+      </div>
+    </div>
     <input id="importFile" type="file" accept="application/json,.json" class="hide" onchange="importBackup(event)">
+  </section>
+
+  <!-- MEHR VIEW -->
+  <section id="view-more" class="view">
+    <div id="moreGrid" class="dbgrid"></div>
+    <div class="panel" id="importPanel">
+      <h2>Spieler aus Liste anlegen</h2>
+      <div class="mutedtxt" style="margin:6px 0 8px">Ein Name pro Zeile (oder durch Komma getrennt), optional mit Nummer, z. B. „7 Anna“, „Anna 7“, „7;Anna“ – auch aus Excel oder WhatsApp kopiert. „(TW)“ markiert den Torwart. Bei vorhandenen Namen wird nur die Nummer angepasst (bei Doppelbelegung tauschen beide).</div>
+      <textarea id="bulkNames" rows="6" placeholder="1 Leon (TW)&#10;7 Anna&#10;Ben, Carl, Dora" oninput="bulkHint()" style="width:100%;background:#0b1220;color:#fff;border:1px solid #64748b;border-radius:9px;padding:11px"></textarea>
+      <div class="row" style="margin-top:8px"><button class="primary" onclick="addPlayersBulk()">Spieler anlegen</button><span id="bulkInfo" class="mutedtxt"></span></div>
+    </div>
   </section>
 
   <!-- PLANUNG VIEW -->
   <section id="view-plan" class="view">
-    <div id="planEmpty" class="notice hide">Noch kein Spieler zugesagt – im Tab <b>Kader</b> Zusagen eintragen, dann erscheinen die Spieler hier. <button class="small primary" onclick="showView('squad')">Zum Kader</button></div>
+    <div id="planEmpty" class="notice hide">Noch kein Spieler zugesagt – unter <b>Spiel → Aufgebot</b> Zusagen eintragen, dann erscheinen die Spieler hier. <button class="small primary" onclick="showView('home')">Zum Aufgebot</button></div>
     <div class="panel">
       <div class="row spread">
         <div><h2>Spielplanung</h2><div class="mutedtxt" id="planSub">7 Zeitblöcke · 70 Minuten · 11 Feldspieler</div></div>
@@ -956,57 +1066,28 @@ html.light .dbbar .tr{background:#e2e8f0}
 
   <!-- KADER VIEW -->
   <section id="view-squad" class="view">
+    <div class="gcols">
+      <div class="gcol">
     <div class="panel">
-      <div class="row spread"><h2>Spielerbestand</h2><span id="squadCount" class="pill"></span></div>
-      <div id="squadStatusSummary" class="mutedtxt" style="margin:6px 0 6px"></div>
-      <div class="row" style="margin-bottom:10px"><button class="small primary" onclick="setOpenToYes()" title="Alle Spieler ohne Rückmeldung auf „Zusage“ setzen (Absagen bleiben)">✓ Offene zusagen</button></div>
-      <div id="squadList" class="grid2"></div>
+      <div class="row spread"><h2>Spielerbestand</h2><span id="rosterCount" class="pill"></span></div>
+      <div id="squadList" class="grid2" style="margin-top:8px"></div>
     </div>
+      </div>
+      <div class="gcol">
     <div class="panel">
-      <h2>Kaderverwaltung</h2>
-      <p class="mutedtxt">Zentrale Spielerliste. Änderungen wirken sich sofort auf Planung, Live-Wechsel und die Taktiktafel aus.</p>
+      <h2>Spieler hinzufügen</h2>
+      <p class="mutedtxt">Zentrale Spielerliste. Änderungen wirken sich sofort auf Plan, Live-Wechsel und die Taktiktafel aus. Mehrere Spieler auf einmal und Nummernvergabe per Liste: Tab Mehr → Spieler aus Liste anlegen. Einzelne Nummer: oben im Feld ändern (Doppelbelegung tauscht). Zu- und Absagen: Spiel → Aufgebot.</p>
       <form id="addPlayerForm" class="formrow">
         <div><label for="newName">Spielername</label><input id="newName" required maxlength="60" placeholder="Vorname Nachname"></div>
         <div><label for="newNumber">Nummer</label><input id="newNumber" required type="number" min="0" max="99" placeholder="Nr."></div>
         <button class="primary" type="submit">+ Spieler hinzufügen</button>
       </form>
-      <div class="row" style="margin-top:14px">
-        <button class="blue" onclick="document.getElementById('importSquadFile').click()">📥 Kader importieren</button>
-        <button class="muted" onclick="exportSquadCSV()">📤 Kader als CSV</button>
-        <input id="importSquadFile" type="file" accept=".csv,.txt,.tsv,.json,text/plain,text/csv,application/json" class="hide" onchange="importSquadFile(event)">
-      </div>
-      <details style="margin-top:14px">
-        <summary style="cursor:pointer;font-weight:800">📋 Mehrere Spieler per Liste einfügen</summary>
-        <div class="mutedtxt" style="margin:8px 0">Ein Name pro Zeile (oder durch Komma getrennt), optional mit Nummer, z. B. „7 Anna“, „Anna 7“, „Anna (TW)“, „Müller, Max“. Auch Excel-/CSV-Zeilen wie „7;Anna“ oder „7 [Tab] Anna“ werden erkannt. Vorhandene Namen werden übersprungen, fehlende Nummern automatisch vergeben.</div>
-        <textarea id="bulkNames" rows="6" placeholder="1 Leon (TW)&#10;7 Anna&#10;Ben, Carl, Dora" oninput="bulkHint()" style="width:100%;background:#0b1220;color:#fff;border:1px solid #64748b;border-radius:9px;padding:11px"></textarea>
-        <div class="row" style="margin-top:8px"><button class="primary" onclick="addPlayersBulk()">Spieler anlegen</button><span id="bulkInfo" class="mutedtxt"></span></div>
-      </details>
     </div>
-    <details class="panel" id="numBoardBox" ontoggle="if(this.open)renderNumBoard()">
-      <summary style="cursor:pointer;font-weight:900;font-size:1.05rem">🔢 Nummern-Board</summary>
-      <div class="mutedtxt" style="margin:8px 0">Spieler auf ein freies Feld ziehen oder antippen und dann das Zielfeld antippen. Auf ein belegtes Feld: die beiden tauschen. Die Nummern gelten sofort in Plan, Live und Taktik.</div>
-      <div id="numBoardInfo" class="mutedtxt" style="min-height:1.3em;font-weight:800"></div>
-      <div id="numBoard" class="numboard"></div>
-      <div class="row" style="margin-top:8px"><button class="small muted" onclick="nbMax=Math.min(99,nbMax+10);renderNumBoard()">+ weitere Nummern</button><button class="small muted" id="nbClear" onclick="nbSel=null;renderNumBoard()">Auswahl aufheben</button></div>
-    </details>
-    <details class="panel" id="waPanel">
-      <summary style="cursor:pointer;font-weight:900;font-size:1.05rem">📣 WhatsApp-Nachricht an die Mannschaft</summary>
-      <div class="mutedtxt" style="margin-bottom:10px">Nimmt den aktuellen Spieltagskader (Zusagen). Plan-Torwart = (TW), Kapitän aus der Auswertung = (C).</div>
-      <div class="waform">
-        <label>Datum<input type="date" id="waDate" oninput="waUpdate()"></label>
-        <label>Uhrzeit (Spielbeginn)<input type="time" id="waTime" oninput="waTimeChanged()"></label>
-        <label>Gegner<input type="text" id="waOpp" placeholder="z. B. SGM Iggingen" oninput="waUpdate()" maxlength="60"></label>
-        <label>Artikel<select id="waArt" onchange="waUpdate()"><option value="die">gegen die</option><option value="den">gegen den</option><option value="das">gegen das</option><option value="">gegen</option></select></label>
-        <label>Treffpunkt Uhrzeit<input type="time" id="waMeetTime" oninput="waMeetEdited=true;waUpdate()"></label>
-        <label>Treffpunkt Ort<input type="text" id="waPlace" placeholder="z. B. Sportplatz Kerkingen" oninput="waUpdate()" maxlength="80"></label>
-      </div>
-      <textarea id="waText" rows="16" style="width:100%;margin-top:10px" aria-label="Nachricht (bearbeitbar)"></textarea>
-      <div id="waInfo" class="mutedtxt" style="margin:6px 0"></div>
-      <div class="row"><button class="primary" onclick="waCopy()">📋 Kopieren</button><button class="blue" onclick="waOpen()">💬 In WhatsApp öffnen</button></div>
-    </details>
     <div class="panel" id="archivePanel" style="display:none">
       <div class="row spread"><div><h2>Archiv</h2><div class="mutedtxt">Nicht im Plan, nicht im Live-Tab. Spieler bleiben erhalten und lassen sich wiederherstellen.</div></div><span id="archiveCount" class="pill"></span></div>
       <div id="archiveList" class="grid2" style="margin-top:10px"></div>
+    </div>
+      </div>
     </div>
   </section>
 
@@ -1014,7 +1095,7 @@ html.light .dbbar .tr{background:#e2e8f0}
   <section id="view-report" class="view">
     <div class="panel">
       <div class="row spread">
-        <h2>Auswertung / Protokoll</h2>
+        <h2>Bericht / Protokoll</h2>
         <div class="row">
           <button class="blue" onclick="exportMatchStatsJSON()">📥 JSON-Spielstatistik Export</button>
         </div>
@@ -1117,7 +1198,7 @@ html.light .dbbar .tr{background:#e2e8f0}
 
 <script>
 'use strict';
-const APP_VERSION='2.57';
+const APP_VERSION='2.61';
 const KEY='c-jugend-master-tool-v1', MAXCLOCK=6*3600;
 // Spielformen: C-Jugend = 11er, 2×35 Min · D-Jugend = 9er, 2×30 Min (Blöcke à 10 Min)
 const MODES={
@@ -1165,17 +1246,23 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function idgen(){return 'p_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,9)}
 
+function cleanInfo(i){
+  i=i&&typeof i==='object'?i:{};
+  const t=v=>/^\d{2}:\d{2}$/.test(String(v||''))?String(v):'';
+  return {date:/^\d{4}-\d{2}-\d{2}$/.test(String(i.date||''))?String(i.date):'',kickoff:t(i.kickoff),opponent:String(i.opponent||'').slice(0,60),
+    article:['die','den','das',''].includes(i.article)?i.article:'die',competition:String(i.competition||'Punktspiel').slice(0,30),meetTime:t(i.meetTime),meetPlace:String(i.meetPlace||'').slice(0,80)};
+}
 function blankState(){
   const players=[];
   const ids=[];
-  return {version:1,mode:MODE.key,players,formation:MODE.def,plan:Object.fromEntries(WINDOWS.map(w=>[w.id,[...ids]])),game:{id:idgen(),half:1,elapsed:0,running:false,lastTick:null,logs:[],ended:false,scoreHome:'',scoreAway:''}};
+  return {version:1,mode:MODE.key,players,formation:MODE.def,plan:Object.fromEntries(WINDOWS.map(w=>[w.id,[...ids]])),game:{id:idgen(),half:1,elapsed:0,running:false,lastTick:null,logs:[],ended:false,scoreHome:'',scoreAway:'',info:cleanInfo({})}};
 }
 
 function normalizeState(s){
   if(s&&typeof s==='object')applyMode(MODES[s.mode]?s.mode:'c');
   const base=blankState();
   if(!s||typeof s!=='object')return base;
-  const players=Array.isArray(s.players)?s.players.map((p,i)=>({id:String(p.id||idgen()),name:String(p.name||`Spieler ${i+1}`).slice(0,60),number:Number(p.number)||i+1,onField:!!p.onField,seconds:Math.max(0,Number(p.seconds)||0),archived:!!p.archived,rsvp:rsvpOf(p),excluded:!!p.excluded})):base.players;
+  const players=Array.isArray(s.players)?s.players.map((p,i)=>({id:String(p.id||idgen()),name:String(p.name||`Spieler ${i+1}`).slice(0,60),number:Number(p.number)||i+1,onField:!!p.onField,seconds:Math.max(0,Number(p.seconds)||0),archived:!!p.archived,rsvp:rsvpOf(p),excluded:!!p.excluded,keeper:!!p.keeper})):base.players;
   const gg=s.game||{},started=!!(gg.running||Number(gg.elapsed)>0||(Array.isArray(gg.logs)&&gg.logs.length));
   const ids=players.filter(p=>!p.archived&&!p.excluded&&(p.rsvp==='yes'||p.seconds>0||(started&&p.onField))).map(p=>p.id);
   const validSet=new Set(players.filter(p=>!p.archived).map(p=>p.id));
@@ -1187,7 +1274,7 @@ function normalizeState(s){
     plan[w.id]=r.arr;planMem[w.id]=r.mem;
   }
   const g=s.game||{};
-  return {version:1,mode:MODE.key,players,formation:(FORMATIONS[s.formation]&&MODE.forms.includes(s.formation))?s.formation:MODE.def,plan,planMem,game:{id:String(g.id||idgen()),half:Number(g.half)===2?2:1,elapsed:Math.max(0,Math.min(MAXCLOCK,Number(g.elapsed)||0)),extra1:Math.max(0,Math.min(MAXCLOCK,Number(g.extra1)||0)),running:!!g.running,lastTick:Number(g.lastTick)||null,logs:Array.isArray(g.logs)?g.logs:[],ended:!!g.ended,captainId:g.captainId?String(g.captainId):null,jerseyId:g.jerseyId?String(g.jerseyId):null,scoreHome:g.scoreHome??'',scoreAway:g.scoreAway??'',exported:!!g.exported,seasonId:g.seasonId?String(g.seasonId):null}};
+  return {version:1,mode:MODE.key,players,formation:(FORMATIONS[s.formation]&&MODE.forms.includes(s.formation))?s.formation:MODE.def,plan,planMem,game:{id:String(g.id||idgen()),half:Number(g.half)===2?2:1,elapsed:Math.max(0,Math.min(MAXCLOCK,Number(g.elapsed)||0)),extra1:Math.max(0,Math.min(MAXCLOCK,Number(g.extra1)||0)),running:!!g.running,lastTick:Number(g.lastTick)||null,logs:Array.isArray(g.logs)?g.logs:[],ended:!!g.ended,captainId:g.captainId?String(g.captainId):null,jerseyId:g.jerseyId?String(g.jerseyId):null,scoreHome:g.scoreHome??'',scoreAway:g.scoreAway??'',exported:!!g.exported,seasonId:g.seasonId?String(g.seasonId):null,info:cleanInfo(g.info)}};
 }
 
 // Beim Öffnen: Lief die Uhr, als die App zuletzt aktiv war, wird nachgefragt statt blind nachgerechnet
@@ -1218,7 +1305,7 @@ function mdReload(){
 }
 function foldInit(){
   document.querySelectorAll('details.fold').forEach(d=>{
-    try{if(localStorage.getItem('md-fold-'+d.id)==='0')d.open=false}catch(e){}
+    try{const st=localStorage.getItem('md-fold-'+d.id);if(d.dataset.def==='0'){if(st==='1')d.open=true}else if(st==='0')d.open=false}catch(e){}
     d.addEventListener('toggle',()=>{try{localStorage.setItem('md-fold-'+d.id,d.open?'1':'0')}catch(e){}});
   });
 }
@@ -1282,19 +1369,27 @@ function toast(msg){
   clearTimeout(toastHandle);toastHandle=setTimeout(()=>el.classList.remove('show'),3000);
 }
 
+const GAME_VIEWS=['home','plan','live','report'];
+let gameSub='home';
 function showView(name){
+  if(name==='game')name=gameSub;
+  if(name==='gsquad')name='home';
+  if(name==='stats')name='season';
+  if(GAME_VIEWS.includes(name))gameSub=name;
   if(gameNotStarted())syncStartingXI();
   document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+name));
-  document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
-  const nav=document.querySelector('.nav'),nb=document.querySelector(`.nav button[data-view="${name}"]`);
-  if(nav&&nb){const left=nb.getBoundingClientRect().left-nav.getBoundingClientRect().left+nav.scrollLeft;nav.scrollTo({left:left-(nav.clientWidth-nb.offsetWidth)/2,behavior:'smooth'})}
-  if(name==='home')renderDashboard();
+  const group=GAME_VIEWS.includes(name)?'game':name;
+  document.querySelectorAll('.botnav button').forEach(b=>b.classList.toggle('active',b.dataset.view===group));
+  const gt=$('gameTabs');if(gt){gt.classList.toggle('hide',group!=='game');gt.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.sub===name))}
+  if(name==='home'){renderDashboard();renderGsquad()}
+  if(name==='more')renderMore();
   if(name==='live')renderLive();
   if(name==='squad')renderSquad();
   if(name==='report'){renderReport();renderGameRoles()}
   if(name==='season')renderSeason();
   updateStatusBar();
   if(name==='tactic')renderTaktik();
+  window.scrollTo(0,0);
 }
 
 // Startelf: solange das Spiel nicht begonnen hat, gilt Block 1 des Plans als Live-Aufstellung
@@ -1450,7 +1545,7 @@ async function toggleTimer(){
   accrue();let g=state.game;
   if(g.ended){toast('Spiel ist beendet. Neues Spiel: Start-Tab → „Neues Spiel / zurücksetzen“.');return}
   if(g.running){g.running=false;g.lastTick=null}else{
-    if(!playersSorted().length){toast('Noch kein Spieler zugesagt – bitte im Kader Zusagen eintragen.');showView('squad');return}
+    if(!playersSorted().length){toast('Noch kein Spieler zugesagt – bitte im Aufgebot Zusagen eintragen.');showView('home');return}
     if(gameNotStarted())syncStartingXI();   // Spielstart immer mit Planungsblock 1
     g.running=true;g.lastTick=Date.now();primeAudio()
   }
@@ -1507,7 +1602,9 @@ async function resetMatch(){
   syncPlanMembership();
   const first=state.plan[0]||[];
   state.players.forEach(p=>{p.seconds=0;p.onField=first.slice(0,FIELDN).includes(p.id)});
-  state.game={id:idgen(),half:1,elapsed:0,extra1:0,running:false,lastTick:null,logs:[],ended:false,captainId:null,jerseyId:null,scoreHome:'',scoreAway:''};
+  const oi=g0.info||{};
+  state.game={id:idgen(),half:1,elapsed:0,extra1:0,running:false,lastTick:null,logs:[],ended:false,captainId:null,jerseyId:null,scoreHome:'',scoreAway:'',info:cleanInfo({article:oi.article,competition:oi.competition,meetPlace:oi.meetPlace})};
+  waMeetEdited=false;
   saveState();renderAll();toast('Neues Spiel vorbereitet.');
 }
 
@@ -1548,18 +1645,11 @@ function cancelSelection(){selectedOut=null;renderLive()}
   }catch(e){window.__clockVisible=true}
 })();
 function updateStatusBar(){
-  const sb=$('statusbar');if(!sb)return;
-  const g=state.game,onLive=$('view-live').classList.contains('active');
-  const onHome=$('view-home').classList.contains('active');
-  const show=(!onLive||!window.__clockVisible)&&!onHome&&!g.ended&&(g.running||g.elapsed>0);
-  sb.classList.toggle('hide',!show);
+  const b=$('navBadge'),btn=document.querySelector('.botnav button[data-view="game"]');if(!b||!btn)return;
+  const g=state.game,show=!g.ended&&(g.running||g.elapsed>0),al=show&&alertActive();
+  btn.classList.toggle('hasbadge',show);b.classList.toggle('hide',!show);b.classList.toggle('pulse',al);
   if(!show)return;
-  $('sbClock').innerHTML=clockHTML(g);$('sbClock').className='sbclock '+(g.running?'running':'paused');
-  $('sbHalf').textContent=`${g.half}. HZ`;
-  $('sbAlert').textContent=alertActive()?'🔔 Wechselzeit':'';
-  $('sbScore').textContent=`${Number(g.scoreHome)||0}:${Number(g.scoreAway)||0}`;
-  $('sbToggle').textContent=g.running?'⏸':'▶';
-  $('sbWake').textContent=wakeLock?'🔆':'';
+  b.innerHTML=`${al?'🔔 ':''}${clockHTML(g)} · ${Number(g.scoreHome)||0}:${Number(g.scoreAway)||0}`;
 }
 function renderClockOnly(){
   const g=state.game;
@@ -1569,6 +1659,7 @@ function renderClockOnly(){
   $('timerStatus').className='status '+(g.running?'running':'paused');
   $('mainToggle').textContent=g.running?'⏸ Pause':g.ended?'■ Beendet':'▶ Start';
   $('mainToggle').disabled=g.ended;
+  {const cd=$('lpCd');if(cd)cd.textContent=' · in '+formatTime(Math.max(0,Number(cd.dataset.at)-g.elapsed))}
   updateStatusBar();
 }
 
@@ -1581,8 +1672,8 @@ function renderLive(){
   $('scoreAway').value=Number(state.game.scoreAway)||0;
   const field=playersSorted().filter(p=>p.onField),bench=playersSorted().filter(p=>!p.onField);
   $('liveCounts').textContent=`${field.length} Feld · ${bench.length} Bank`;
-  $('liveField').innerHTML=field.length?field.map(p=>`<div class="fieldcard"><button class="playerbtn ${selectedOut===p.id?'selected':''}" onclick="selectLivePlayer('${p.id}')"><span class="num">#${p.number}</span><span class="pname">${esc(p.name)}<br><small class="mutedtxt live-time" data-player-id="${p.id}">Feld · ${formatTime(p.seconds)}</small></span>${selectedOut===p.id?'<span>↔</span>':''}</button><button class="goalbtn" title="Tor für ${esc(p.name)}" aria-label="Tor für ${esc(p.name)}" onclick="quickGoal('${p.id}')">⚽</button></div>`).join(''):'<div class="empty">Keine Feldspieler.</div>';
-  $('liveBench').innerHTML=bench.length?bench.map(p=>`<button class="playerbtn" onclick="selectLivePlayer('${p.id}')"><span class="num">#${p.number}</span><span class="pname">${esc(p.name)}<br><small class="mutedtxt live-time" data-player-id="${p.id}">Bank · ${formatTime(p.seconds)}</small></span></button>`).join(''):'<div class="empty">Keine Bankspieler.</div>';
+  $('liveField').innerHTML=field.length?field.map(p=>`<div class="fieldcard"><button class="playerbtn ${selectedOut===p.id?'selected':''}" onclick="selectLivePlayer('${p.id}')"><span class="num">#${p.number}</span><span class="pname">${esc(p.name)}${p.keeper?' 🧤':''}<br><small class="mutedtxt live-time" data-player-id="${p.id}">Feld · ${formatTime(p.seconds)}</small></span>${selectedOut===p.id?'<span>↔</span>':''}</button><button class="goalbtn" title="Tor für ${esc(p.name)}" aria-label="Tor für ${esc(p.name)}" onclick="quickGoal('${p.id}')">⚽</button></div>`).join(''):'<div class="empty">Keine Feldspieler.</div>';
+  $('liveBench').innerHTML=bench.length?bench.map(p=>`<button class="playerbtn" onclick="selectLivePlayer('${p.id}')"><span class="num">#${p.number}</span><span class="pname">${esc(p.name)}${p.keeper?' 🧤':''}<br><small class="mutedtxt live-time" data-player-id="${p.id}">Bank · ${formatTime(p.seconds)}</small></span></button>`).join(''):'<div class="empty">Keine Bankspieler.</div>';
   $('liveInstruction').textContent=selectedOut?`Ausgewählt: #${player(selectedOut)?.number} ${player(selectedOut)?.name}. Jetzt Bankspieler antippen.`:'Zuerst Feldspieler, danach Bankspieler antippen.';
   $('cancelSwap').classList.toggle('hide',!selectedOut);
   $('pendingPlan').innerHTML=renderPendingPlan()+livePreviewHtml();
@@ -1646,10 +1737,10 @@ function renderGoals(){
   $('goalCounts').textContent=`${Number(g.scoreHome)||0} : ${Number(g.scoreAway)||0}`;
   if(!goalFlow){pick.innerHTML=''}
   else if(goalFlow.step==='scorer'){
-    pick.innerHTML=`<div class="notice"><b>Wer hat das Tor geschossen?</b><div style="margin-top:6px"><label style="display:inline-flex;gap:8px;align-items:center;font-weight:600;cursor:pointer"><input type="checkbox" ${askAssist()?'checked':''} onchange="setAskAssist(this.checked)" style="width:20px;height:20px"> danach nach Vorlage fragen</label></div></div><div class="benchlist">`+field.map(p=>`<button class="playerbtn" onclick="pickScorer('${p.id}')"><span class="num">#${p.number}</span><span class="pname">${esc(p.name)}</span></button>`).join('')+`<button class="playerbtn" onclick="pickScorer('own')"><span class="pname">Eigentor Gegner</span></button></div><button class="muted" style="margin-top:8px" onclick="cancelGoal()">Abbrechen</button>`;
+    pick.innerHTML=`<div class="notice"><b>Wer hat das Tor geschossen?</b><div style="margin-top:6px"><label style="display:inline-flex;gap:8px;align-items:center;font-weight:600;cursor:pointer"><input type="checkbox" ${askAssist()?'checked':''} onchange="setAskAssist(this.checked)" style="width:20px;height:20px"> danach nach Vorlage fragen</label></div></div><div class="benchlist">`+field.map(p=>`<button class="playerbtn" onclick="pickScorer('${p.id}')"><span class="num">#${p.number}</span><span class="pname">${esc(p.name)}${p.keeper?' 🧤':''}</span></button>`).join('')+`<button class="playerbtn" onclick="pickScorer('own')"><span class="pname">Eigentor Gegner</span></button></div><button class="muted" style="margin-top:8px" onclick="cancelGoal()">Abbrechen</button>`;
   }else{
     const sc=player(goalFlow.scorerId);
-    pick.innerHTML=`<div class="notice"><b>Tor: #${esc(sc?.number)} ${esc(sc?.name)}</b> · Wer hat vorgelegt?</div><div class="benchlist">`+field.filter(p=>p.id!==goalFlow.scorerId).map(p=>`<button class="playerbtn" onclick="finishGoal('${p.id}')"><span class="num">#${p.number}</span><span class="pname">${esc(p.name)}</span></button>`).join('')+`<button class="playerbtn" onclick="finishGoal(null)"><span class="pname">Ohne Vorlage</span></button></div><button class="muted" style="margin-top:8px" onclick="cancelGoal()">Abbrechen</button>`;
+    pick.innerHTML=`<div class="notice"><b>Tor: #${esc(sc?.number)} ${esc(sc?.name)}</b> · Wer hat vorgelegt?</div><div class="benchlist">`+field.filter(p=>p.id!==goalFlow.scorerId).map(p=>`<button class="playerbtn" onclick="finishGoal('${p.id}')"><span class="num">#${p.number}</span><span class="pname">${esc(p.name)}${p.keeper?' 🧤':''}</span></button>`).join('')+`<button class="playerbtn" onclick="finishGoal(null)"><span class="pname">Ohne Vorlage</span></button></div><button class="muted" style="margin-top:8px" onclick="cancelGoal()">Abbrechen</button>`;
   }
   const recent=g.logs.filter(l=>l.type==='goal'||l.type==='oppgoal').slice(-4).reverse();
   $('recentGoals').innerHTML=recent.map(l=>`<div class="event"><div class="row spread"><div><div class="mutedtxt">${l.half}. HZ · ${formatTime(l.seconds)}</div><b>${esc(l.text)}</b></div><button class="muted small" onclick="undoGoal('${l.id}')">↩ Rückgängig</button></div></div>`).join('')||'<div class="empty">Noch keine Tore.</div>';
@@ -1688,7 +1779,7 @@ function livePreviewHtml(){
   const nm=id=>{const p=player(id);return p?`#${p.number} ${esc(p.name)}`:'—'};
   const warn='color:var(--warn);font-weight:800';
   const planTxt=pOuts.map((o,k)=>`${nm(o)} ↔ ${nm(pIns[k])}`).join(' · ');
-  return `<div class="notice" style="margin-top:8px"><b>⏭ Nächster Block ${nb+1} · ab ${nb*10}'</b>`
+  return `<div class="notice" style="margin-top:8px"><b>⏭ Nächster Block ${nb+1} · ab ${nb*10}'</b><span class="mutedtxt" id="lpCd" data-at="${nb*600}"> · in ${formatTime(Math.max(0,nb*600-g.elapsed))}</span>`
     +(dev?`<div style="${warn};margin-top:4px">⚠ Feld weicht vom Plan (Block ${block+1}) ab: ${extra.map(nm).join(', ')||'–'} statt ${missing.map(nm).join(', ')||'–'} → Wechsel unten angepasst.</div>`:'')
     +(pairs.length?pairs.map(x=>`<div class="subrow" style="margin-top:6px"><div>🟥 ${x.o?nm(x.o):'—'}</div><div>↔</div><div>🟩 ${x.n?nm(x.n):'—'}</div>${x.plan?'':`<div style="grid-column:1/-1;${warn}">⚠ anders als geplant</div>`}</div>`).join(''):'<div class="mutedtxt" style="margin-top:4px">Keine Wechsel geplant.</div>')
     +(dev&&planTxt?`<div class="mutedtxt" style="margin-top:6px">Plan wäre: ${planTxt}</div>`:'')
@@ -1875,24 +1966,38 @@ function renderMatrix(){
 }
 
 function renderSquad(){
-  waUpdate();
   if($('numBoardBox')&&$('numBoardBox').open)renderNumBoard();
   const ps=rosterSorted();
   const archived=state.players.filter(p=>p.archived).sort((a,b)=>a.number-b.number);
+  $('rosterCount').textContent=`${ps.length} Spieler`;
+  $('squadList').innerHTML=ps.map(p=>`<div class="playercard"><div class="row"><input class="numfield" type="number" inputmode="numeric" min="0" max="99" value="${p.number}" aria-label="Trikotnummer ${esc(p.name)}" title="Nummer ändern – bei Belegung wird getauscht" onfocus="this.select()" onkeydown="if(event.key==='Enter')this.blur()" onchange="setNumber('${p.id}',this.value,this)"><b style="flex:1;overflow-wrap:anywhere">${esc(p.name)}</b><button class="small ${p.keeper?'warning':'muted'}" style="min-width:38px;padding:4px 8px" title="${p.keeper?'Torwart – antippen zum Entfernen':'Als Torwart markieren'}" aria-label="Torwart" onclick="toggleKeeper('${p.id}')">🧤</button><button class="morebtn muted" title="Mehr" aria-label="Mehr Aktionen" onclick="this.closest('.playercard').classList.toggle('open')">⋯</button></div><div class="morebox"><button class="small muted" onclick="editPlayer('${p.id}')">Name ändern</button><button class="small muted" onclick="archivePlayer('${p.id}')">Archivieren</button><button class="small danger" onclick="deletePlayer('${p.id}')">Löschen</button></div></div>`).join('')||'<div class="empty">Keine Spieler angelegt.</div>';
+  $('archivePanel').style.display=archived.length?'':'none';
+  $('archiveCount').textContent=`${archived.length} archiviert`;
+  $('archiveList').innerHTML=archived.map(p=>`<div class="playercard"><div class="row"><span class="num sqnum">#${p.number}</span><b style="flex:1;overflow-wrap:anywhere">${esc(p.name)}</b></div><div class="row"><button class="small primary" onclick="restorePlayer('${p.id}')">Wiederherstellen</button><button class="small danger" onclick="deletePlayer('${p.id}')">Löschen</button></div></div>`).join('');
+  renderTaktikBench();
+}
+function renderGsquad(){
+  giFill();
+  waUpdate();
+  const ps=rosterSorted();
   const cnt={yes:0,no:0,none:0};ps.forEach(p=>cnt[rsvpOf(p)]++);
   $('squadCount').textContent=`${ps.filter(isAvailable).length} im Spieltagskader`;
   $('squadStatusSummary').textContent=`Zugesagt ${cnt.yes} · Abgesagt ${cnt.no} · Offen ${cnt.none} · Nicht berücksichtigt ${ps.filter(p=>p.excluded).length}`;
   const block=Math.min(WINDOWS.length-1,Math.floor(state.game.elapsed/600));
   const planField=new Set(blockArr(block).slice(0,FIELDN));
-  $('squadList').innerHTML=ps.map(p=>{
-    const av=isAvailable(p),inPlan=planField.has(p.id);
-    const planTxt=av?`Plan Block ${block+1}: ${inPlan?'Feld':'Bank'}${inPlan===!!p.onField?'':' <span style="color:var(--warn);font-weight:800">⚠ weicht von Live ab</span>'}`:'';
-    return `<div class="playercard"${av?'':' style="opacity:.62"'}><div class="row"><input class="numfield" type="number" inputmode="numeric" min="0" max="99" value="${p.number}" aria-label="Trikotnummer ${esc(p.name)}" title="Nummer ändern – bei Belegung wird getauscht" onfocus="this.select()" onkeydown="if(event.key==='Enter')this.blur()" onchange="setNumber('${p.id}',this.value,this)"><b style="flex:1;overflow-wrap:anywhere">${esc(p.name)}</b>${av?`<span class="pill ${p.onField?'greenpill':''}">${p.onField?'Feld':'Bank'}</span>`:'<span class="pill redpill">Nicht im Kader</span>'}${av?`<button class="small ${state.game.captainId===p.id?'warning':'muted'}" style="min-width:38px;padding:4px 8px;font-weight:900" title="${state.game.captainId===p.id?'Kapitän – antippen zum Entfernen':'Zum Kapitän machen'}" aria-label="Kapitän" onclick="setCaptainKader('${p.id}')">©</button>`:''}<button class="morebtn muted" title="Mehr" aria-label="Mehr Aktionen" onclick="this.closest('.playercard').classList.toggle('open')">⋯</button></div><div class="morebox"><button class="small muted" onclick="editPlayer('${p.id}')">Name ändern</button><button class="small muted" onclick="archivePlayer('${p.id}')">Archivieren</button><button class="small danger" onclick="deletePlayer('${p.id}')">Löschen</button></div>${squadStatusRows(p)}${(()=>{const st=!gameNotStarted(),mis=av&&inPlan!==!!p.onField?'<span style="color:var(--warn);font-weight:800">⚠ weicht von Live ab</span>':'';const t=st?`Ist ${formatTime(p.seconds)} · Soll ${formatTime(plannedSeconds(p.id))}${planTxt?' · '+planTxt:''}`:(av?`Soll ${formatTime(plannedSeconds(p.id))}`:'')+(mis?' · '+mis:'');return t?`<div class="mutedtxt sqinfo">${t}</div>`:''})()}</div>`;
-  }).join('')||'<div class="empty">Keine Spieler angelegt.</div>';
-  $('archivePanel').style.display=archived.length?'':'none';
-  $('archiveCount').textContent=`${archived.length} archiviert`;
-  $('archiveList').innerHTML=archived.map(p=>`<div class="playercard"><div class="row"><span class="num sqnum">#${p.number}</span><b style="flex:1;overflow-wrap:anywhere">${esc(p.name)}</b></div><div class="row"><button class="small primary" onclick="restorePlayer('${p.id}')">Wiederherstellen</button><button class="small danger" onclick="deletePlayer('${p.id}')">Löschen</button></div></div>`).join('');
-  renderTaktikBench();
+  $('rsvpList').innerHTML=ps.map(p=>{
+    const av=isAvailable(p),inPlan=planField.has(p.id),r=rsvpOf(p);
+    const st=!gameNotStarted(),mis=av&&inPlan!==!!p.onField?' · ⚠ weicht von Live ab':'';
+    const t=st?`Ist ${formatTime(p.seconds)} · Soll ${formatTime(plannedSeconds(p.id))} · Block ${block+1}: ${inPlan?'Feld':'Bank'}${mis}`:(av?`Soll ${formatTime(plannedSeconds(p.id))}`:'nicht im Spieltagskader');
+    const b=(cls,title,lab,fn,txt)=>`<button class="rb ${cls}" title="${title}" aria-label="${lab}" onclick="${fn}">${txt}</button>`;
+    return `<div class="rsvprow ${p.excluded?'off':r==='yes'?'y':r==='no'?'n':'o'}${av?'':' off'}"><span class="rname"><span><b class="nr">#${p.number}</b>${esc(p.name)}${p.keeper?' 🧤':''}</span><small>${t}</small></span><div class="rbtns">`
+      +b(r==='yes'?'primary':'muted','Zugesagt','Zusage',`setRsvp('${p.id}','yes')`,'✓')
+      +b(r==='no'?'danger':'muted','Abgesagt','Absage',`setRsvp('${p.id}','no')`,'✗')
+      +b(r==='none'?'warning':'muted','Keine Rückmeldung','Offen',`setRsvp('${p.id}','none')`,'?')
+      +b(p.excluded?'danger':'muted',p.excluded?'Nicht im Spieltagskader – antippen zum Aufnehmen':'Aus dem Spieltagskader nehmen','Spieltagskader',`toggleExcluded('${p.id}')`,'⛔')
+      +(av?b(state.game.captainId===p.id?'warning':'muted',state.game.captainId===p.id?'Kapitän – antippen zum Entfernen':'Zum Kapitän machen','Kapitän',`setCaptainKader('${p.id}')`,'©'):'')
+      +'</div></div>';
+  }).join('')||'<div class="empty">Keine Spieler angelegt – zuerst im Tab Kader anlegen.</div>';
 }
 function squadStatusRows(p){
   const r=rsvpOf(p);
@@ -1949,25 +2054,28 @@ function bulkHint(){const n=parseNameList($('bulkNames').value).length;$('bulkIn
 function addPlayersFromList(list){
   const exist=new Set(state.players.map(p=>p.name.trim().toLowerCase()));
   const taken=new Set(state.players.map(p=>Number(p.number)));
-  let added=0,skipped=0,renum=0;
+  let added=0,skipped=0,renum=0,changed=0;
   list.forEach(({name,number})=>{
     const key=name.toLowerCase();
-    if(exist.has(key)){skipped++;return}
+    if(exist.has(key)){
+      const ex=state.players.find(p=>!p.archived&&p.name.trim().toLowerCase()===key);
+      if(ex&&number!=null&&Number(ex.number)!==number){const oth=state.players.find(p=>!p.archived&&p.id!==ex.id&&Number(p.number)===number);if(oth)oth.number=Number(ex.number);ex.number=number;taken.add(number);changed++}else skipped++;
+      return}
     let nr=number;
     if(nr==null||taken.has(nr)){if(nr!=null)renum++;nr=1;while(taken.has(nr))nr++}
     taken.add(nr);exist.add(key);
-    const pl={id:idgen(),name,number:nr,onField:false,seconds:0,archived:false,rsvp:'none',excluded:false};
+    const pl={id:idgen(),name,number:nr,onField:false,seconds:0,archived:false,rsvp:'none',excluded:false,keeper:/\(\s*[^)]*\bTW\b/i.test(name)};
     state.players.push(pl);added++;
   });
-  if(added){syncPlanMembership();saveState();$('newNumber').value=nextNumber();renderAll();syncTaktikPlayers()}
-  return {added,skipped,renum};
+  if(added||changed){syncPlanMembership();saveState();$('newNumber').value=nextNumber();renderAll();syncTaktikPlayers()}
+  return {added,skipped,renum,changed};
 }
-function bulkMsg(r){return `${r.added} Spieler angelegt${r.skipped?`, ${r.skipped} schon vorhanden`:''}${r.renum?`, ${r.renum} Nummer(n) neu vergeben`:''}.`}
+function bulkMsg(r){return `${r.added} Spieler angelegt${r.changed?`, ${r.changed} Nummer(n) geändert`:''}${r.skipped?`, ${r.skipped} schon vorhanden`:''}${r.renum?`, ${r.renum} Nummer(n) neu vergeben`:''}.`}
 function addPlayersBulk(){
   const list=parseNameList($('bulkNames').value);
   if(!list.length){toast('Keine Namen erkannt.');return}
   const r=addPlayersFromList(list);
-  if(r.added){$('bulkNames').value='';$('bulkInfo').textContent=''}
+  if(r.added||r.changed){$('bulkNames').value='';$('bulkInfo').textContent=''}
   toast(bulkMsg(r));
 }
 // Datei lesen (UTF-8, sonst Windows-1252 wie bei Excel-CSV)
@@ -2426,6 +2534,11 @@ function setGameRole(role,id){
   if(role==='captain')state.game.captainId=id||null;else state.game.jerseyId=id||null;
   saveState();
 }
+function toggleKeeper(id){
+  const p=player(id);if(!p)return;
+  p.keeper=!p.keeper;saveState();renderAll();
+  toast(p.keeper?`${p.name}: Torwart markiert.`:`${p.name}: Torwart-Markierung entfernt.`);
+}
 function setCaptainKader(id){
   state.game.captainId=(state.game.captainId===id)?null:id;
   saveState();renderAll();
@@ -2491,6 +2604,45 @@ function dbSeasonSummary(){
   const top=(key)=>{const b=rows.slice().sort((a,c)=>c[key]-a[key])[0];return b&&b[key]>0?`${b.name} (${b[key]})`:'–'};
   return {n:list.length,w,d,l,gf,ga,scorer:top('goals'),assist:top('assists')};
 }
+function giLineHtml(){
+  const i=state.game.info||{};
+  if(!i.opponent&&!i.kickoff)return `<div class="mutedtxt" style="margin:4px 0 8px">Gegner und Spielbeginn fehlen. <button class="small muted" onclick="showView('home');setTimeout(()=>{const e=$('giPanel');if(e){e.open=true;e.scrollIntoView({behavior:'smooth',block:'start'})}},80)">Spieldaten eintragen</button></div>`;
+  const d=i.date?new Date(i.date+'T12:00:00'):null,ds=d&&!isNaN(d)?d.toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'}):'';
+  const meet=(i.meetTime||i.meetPlace)?` · Treffpunkt ${[i.meetTime?i.meetTime+' Uhr':'',esc(i.meetPlace)].filter(Boolean).join(' ')}`:'';
+  return `<div style="margin:4px 0 8px"><b>${i.opponent?'gegen '+esc(i.opponent):'Gegner offen'}</b><span class="mutedtxt"> · ${[ds,i.kickoff?i.kickoff+' Uhr':'',esc(i.competition)].filter(Boolean).join(' · ')}${meet}</span></div>`;
+}
+let spBk={loading:false,list:null,err:''};
+async function spBackupsLoad(){
+  spBk.loading=true;spBk.err='';renderMore();
+  try{spBk.list=await MDSync.listBackups()}catch(e){spBk.err=(e&&e.message)||String(e);spBk.list=null}
+  spBk.loading=false;renderMore();
+}
+async function spBackupRestore(id,name){
+  try{toast('Backup wird geladen …');const txt=await MDSync.fetchBackup(id);let d;try{d=JSON.parse(txt)}catch(e){toast('Backup-Datei ist beschädigt.');return}await restoreFromData(d,name)}
+  catch(e){toast('Backup konnte nicht geladen werden: '+((e&&e.message)||e))}
+}
+function spBackupLabel(n){const m=/^Matchday-Backup-(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})\.json$/.exec(n);return m?`${m[3]}.${m[2]}.${m[1]} · ${m[4]}:${m[5]} Uhr`:n}
+function spBackupsHtml(){
+  if(!MDSync.active)return '';
+  const rows=spBk.list&&spBk.list.length?spBk.list.map(x=>`<div class="row spread" style="margin-top:6px;gap:6px"><div style="min-width:0"><b>${esc(spBackupLabel(x.name))}</b><div class="mutedtxt">${Math.max(1,Math.round(x.size/1024))} KB</div></div><button class="small primary" onclick="spBackupRestore('${esc(x.id)}','${esc(x.name)}')">Wiederherstellen</button></div>`).join(''):(spBk.list?'<div class="mutedtxt" style="margin-top:8px">Keine Backups im Ordner „Matchday/Backups“.</div>':'');
+  return `<div class="panel"><h2>☁ SharePoint-Backups</h2>
+    <div class="mutedtxt">Die letzten 10 Backups aus „Matchday/Backups“. Wiederherstellen ersetzt den aktuellen Stand (vorher interne Sicherung) und wird beim nächsten Abgleich auch in SharePoint übernommen.</div>
+    <div class="row" style="margin-top:8px"><button class="small primary" onclick="spBackupsLoad()"${spBk.loading?' disabled':''}>${spBk.loading?'Lade …':'Liste laden'}</button><button class="small muted" onclick="MDSync.backupNow()">☁ Jetzt Backup speichern</button></div>
+    ${spBk.err?`<div class="dbwarn" style="margin-top:8px">${esc(spBk.err)}</div>`:''}${rows}</div>`;
+}
+function renderMore(){
+  const host=$('moreGrid');if(!host)return;
+  let ready=false;try{ready=localStorage.getItem('md-offline-ready')==='1'}catch(e){}
+  let html=`<div class="panel"><h2>Sicherung</h2>
+    <div class="mutedtxt">Datei-Backup mit Kader, Plan, Spieldaten, Saison und Taktik-Slots. Beim Einspielen wird der aktuelle Stand vorher intern gesichert.</div>
+    <div class="row" style="margin-top:10px"><button class="small primary" onclick="exportBackup()" style="line-height:1.15">Gesamt-Backup<br><small id="backupInfo" style="font-weight:600;opacity:.85"></small></button><button class="small muted" onclick="document.getElementById('importFile').click()" title="Komplettes Backup einspielen (Kader, Plan, Saison, Taktik-Slots)">Gesamt-Import</button></div></div>`;
+  html+=spBackupsHtml();
+  html+=snapPanelHtml();
+  if(MDSync.active)html+=MDSync.panelHtml();
+  html+=`<div class="panel"><h2>Über</h2><div class="mutedtxt">Matchday &amp; Taktik Pro · Version ${esc(APP_VERSION)}<br>${ready?'✓ Offline-fähig (App ist zwischengespeichert).':'Offline-Zwischenspeicher noch nicht bereit oder nicht verfügbar (nur über https).'}<br>Daten liegen lokal im Browser dieses Geräts${MDSync.active?' und werden per Microsoft-365-Sync abgeglichen':''}.</div></div>`;
+  host.innerHTML=html;
+  updateBackupInfo();
+}
 function renderDashboard(){
   const host=$('dbGrid');if(!host)return;
   const g=state.game,avail=playersSorted();
@@ -2501,52 +2653,62 @@ function renderDashboard(){
   const cap=player(g.captainId),jer=player(g.jerseyId);
   const nx=dbNextSwitch();
   const score=`${Number(g.scoreHome)||0} : ${Number(g.scoreAway)||0}`;
-  let html='';
-  // Kachel 1: Spieltag
-  html+=`<div class="panel"><h2>Spieltag · ${esc(MODE.name)} (${esc(MODE.short)})</h2>
-    <div class="dbstat"><span class="pill${g.running?' greenpill':''}">${stTxt}</span>${started?`<span class="dbbig" id="dbClock">${clockHTML(g)}</span><span class="dbbig">${score}</span>`:`<span class="mutedtxt">${MODE.halfMin*2} Min · ${WINDOWS.length} Blöcke · ${FIELDN} Feldspieler</span>`}</div>
-    ${nx&&!g.ended?`<div class="mutedtxt" style="margin-top:8px">Nächster Block ab ${nx.minute}' ${started?`(in ${formatTime(nx.inSec)})`:''} · ${nx.n} geplante${nx.n===1?'r Wechsel':' Wechsel'}</div>`:''}
-    <div class="dbpills"><span class="pill">✓ ${yes} zugesagt</span><span class="pill">✗ ${no} abgesagt</span><span class="pill">? ${none} offen</span>${excl?`<span class="pill">${excl} nicht im Kader</span>`:''}</div>
-    <div class="mutedtxt">Kapitän: <b>${cap?esc(cap.name):'–'}</b> · Trikotdienst: <b>${jer?esc(jer.name):'–'}</b></div>
-    <div class="row" style="margin-top:12px"><button class="small primary" onclick="showView('squad')">Kader</button><button class="small primary" onclick="showView('plan')">Plan</button><button class="small ${g.running?'danger':'primary'}" onclick="showView('live')">${started&&!g.ended?'Zur Live-Ansicht':'Live'}</button></div></div>`;
-  // Kachel 2: Spielzeit-Verteilung (Plan)
-  const rows=avail.map(p=>({p,min:plannedSeconds(p.id)/60})).sort((a,b)=>b.min-a.min||a.p.number-b.p.number);
-  const total=WINDOWS.length*10*FIELDN,avg=avail.length?total/avail.length:0;
-  const maxMin=Math.max(1,...rows.map(r=>r.min),MODE.halfMin*2);
-  html+=`<details class="panel" id="foldDbPlan"${(()=>{try{return localStorage.getItem('md-fold-foldDbPlan')==='1'?' open':''}catch(e){return''}})()} ontoggle="try{localStorage.setItem('md-fold-foldDbPlan',this.open?'1':'0')}catch(e){}"><summary style="cursor:pointer;font-weight:900;font-size:1.05rem">Spielzeit laut Plan</summary>${rows.length?`<div class="mutedtxt">Ø ${Math.round(avg)} Min je Spieler</div><div class="dbbars">${rows.map(r=>`<div class="dbbar${r.min===0?' zero':r.min<avg*0.6?' low':''}"><span class="nm">#${r.p.number} ${esc(r.p.name)}</span><span class="tr"><span class="fl" style="display:block;width:${Math.round(r.min/maxMin*100)}%"></span></span><span class="mn">${r.min}'</span></div>`).join('')}</div>`:'<div class="empty">Noch keine Spieler im Kader.</div>'}<div class="row" style="margin-top:10px"><button class="small muted" onclick="showView('plan')">Plan öffnen</button></div></details>`;
-  // Kachel 3: Saison
-  const ss=dbSeasonSummary();
-  html+=`<div class="panel"><h2>Saison</h2>${ss.n?`<div class="dbstat"><span><span class="dbbig">${ss.n}</span> <span class="mutedtxt">Spiele</span></span><span><b>${ss.w}S · ${ss.d}U · ${ss.l}N</b><br><span class="mutedtxt">Tore ${ss.gf}:${ss.ga}</span></span></div><div class="mutedtxt" style="margin-top:8px">Top-Torschütze: <b>${esc(ss.scorer)}</b><br>Meiste Vorlagen: <b>${esc(ss.assist)}</b></div>`:'<div class="empty">Noch keine Spiele in der aktuellen Saison.</div>'}<div class="row" style="margin-top:10px"><button class="small muted" onclick="showView('season')">Zur Saison</button></div></div>`;
-  // Kachel 4: Hinweise
   const warns=[];
-  if(!avail.length)warns.push('Noch kein Spieler zugesagt – im Tab Kader Zusagen eintragen, dann erscheinen sie in Plan, Live und Taktik.');
+  if(!avail.length)warns.push('Noch kein Spieler zugesagt – unter Spiel → Aufgebot Zusagen eintragen, dann erscheinen sie in Plan, Live und Taktik.');
   else if(avail.length<FIELDN)warns.push(`Nur ${avail.length} zugesagte Spieler – für ${FIELDN} Feldspieler zu wenig.`);
-  if(!g.ended&&avail.length&&(!g.captainId||!g.jerseyId)&&gameNotStarted())warns.push('Kapitän und/oder Trikotdienst noch nicht festgelegt (Kapitän: Tab Kader ©, Trikotdienst: Auswertung).');
-  if(g.ended&&!g.exported)warns.push('Spiel beendet – noch nicht in die Saison übernommen (Tab Auswertung: JSON-Export, danach im Tab Saison importieren).');
+  if(!g.ended&&avail.length&&(!g.captainId||!g.jerseyId)&&gameNotStarted())warns.push('Kapitän und/oder Trikotdienst noch nicht festgelegt (Spiel → Aufgebot: Kapitän © und Trikotdienst).');
+  if(g.ended&&!g.exported)warns.push('Spiel beendet – noch nicht in die Saison übernommen (Spiel → Bericht: JSON-Export, danach im Tab Statistik importieren).');
+  if(!g.ended&&avail.length&&gameNotStarted()&&(!g.info.opponent||!g.info.kickoff))warns.push('Gegner und/oder Spielbeginn noch nicht eingetragen (Spiel → Aufgebot → Spieldaten).');
+  if(gameNotStarted()&&avail.some(p=>p.keeper)){
+    for(let b=0;b<WINDOWS.length;b++){const gk=player(blockArr(b)[0]);if(gk&&!gk.keeper){warns.push(`Plan Block ${b+1}: Platz 1 (Torwart) ist ${gk.name} – nicht als 🧤 markiert.`);break}}
+  }
   const bt=lastBackupTime();
-  if(state.players.length&&(!bt||Date.now()-bt>14*86400000))warns.push(`Letztes Backup: ${agoText(bt)}.`);
-  html+=`<div class="panel"><h2>Hinweise</h2>${warns.length?warns.map(w=>`<div class="dbwarn">⚠ ${esc(w)}</div>`).join(''):'<div class="dbok">✓ Alles in Ordnung.</div>'}</div>`;
-  // Kachel 5: Verwalten
-  html+=`<div class="panel"><h2>Spieltag &amp; Daten</h2>
-    <div class="row"><button class="${g.ended?'primary':'muted'}" onclick="resetMatch()">Neues Spiel / zurücksetzen</button></div>
-    <div class="row" style="margin-top:10px"><button class="small muted" onclick="exportBackup()" style="line-height:1.15">Gesamt-Backup<br><small id="backupInfo" style="font-weight:600;opacity:.85"></small></button><button class="small muted" onclick="document.getElementById('importFile').click()" title="Komplettes Backup einspielen (Kader, Plan, Saison, Taktik-Slots)">Gesamt-Import</button></div></div>`;
-  html+=snapPanelHtml();
-  if(MDSync.active)html+=MDSync.panelHtml();
+  if(state.players.length&&(!bt||Date.now()-bt>14*86400000))warns.push(`Letztes Backup: ${agoText(bt)} (Tab Mehr → Sicherung).`);
+  const hOpen=(()=>{try{return localStorage.getItem('md-fold-foldHints')==='1'}catch(e){return false}})();
+  let html=`<div class="panel">
+    <div class="row spread" style="margin:0 0 4px"><div class="row" style="margin:0"><span class="pill${g.running?' greenpill':''}">${stTxt}</span><span class="mutedtxt">${esc(MODE.name)} · ${MODE.halfMin*2} Min</span>${started?`<span class="dbbig" id="dbClock">${clockHTML(g)}</span><span class="dbbig">${score}</span>`:''}</div>
+      <button class="small ${g.ended?'primary':'muted'}" onclick="resetMatch()">Neues Spiel</button></div>
+    ${giLineHtml()}
+    <div class="dbc-pills"><span class="pill">✓ ${yes} zugesagt</span><span class="pill">✗ ${no} abgesagt</span><span class="pill">? ${none} offen</span>${excl?`<span class="pill">${excl} nicht im Kader</span>`:''}</div>
+    <div class="mutedtxt">Kapitän: <b>${cap?esc(cap.name):'–'}</b> · Trikotdienst: <b>${jer?esc(jer.name):'–'}</b>${nx&&!g.ended?` · Nächster Block ab ${nx.minute}'${started?` (in ${formatTime(nx.inSec)})`:''}, ${nx.n} Wechsel`:''}</div>
+    ${warns.length?`<details class="hints2"${hOpen?' open':''} ontoggle="try{localStorage.setItem('md-fold-foldHints',this.open?'1':'0')}catch(e){}"><summary>⚠ ${warns.length} Hinweis${warns.length===1?'':'e'}</summary>${warns.map(w=>`<div class="dbwarn">${esc(w)}</div>`).join('')}</details>`:'<div class="dbok" style="margin-top:6px">✓ Alles in Ordnung.</div>'}
+  </div>`;
   host.innerHTML=html;
-  updateBackupInfo();
 }
 
 // ---------- WhatsApp-Nachricht ----------
 const WA_KEY='c-jugend-wa-v1';
 let waMeetEdited=false,waTextEdited=false;
-function waLoad(){
-  try{const d=JSON.parse(localStorage.getItem(WA_KEY)||'{}');
-    if($('waPlace')&&d.place)$('waPlace').value=d.place;
-    if($('waArt')&&d.art!=null)$('waArt').value=d.art;
+function waLoad(){ // einmalig: Ort/Artikel aus der alten Speicherung übernehmen
+  try{const d=JSON.parse(localStorage.getItem(WA_KEY)||'{}'),i=state.game.info;
+    if(i&&!i.meetPlace&&d.place)i.meetPlace=String(d.place).slice(0,80);
+    if(i&&d.art!=null&&!i.opponent&&['die','den','das',''].includes(d.art))i.article=d.art;
   }catch(e){}
 }
-function waSave(){try{localStorage.setItem(WA_KEY,JSON.stringify({place:$('waPlace').value,art:$('waArt').value}))}catch(e){}}
-function waTimeChanged(){
+function waSave(){}
+function giFill(){
+  const i=state.game.info;if(!i||!$('waOpp'))return;
+  if(!i.date)i.date=localDate();
+  {const sm=$('giSum');if(sm)sm.textContent=(i.opponent||i.kickoff)?'· '+[i.opponent?'gegen '+i.opponent:'',i.kickoff?i.kickoff+' Uhr':''].filter(Boolean).join(' · '):'· noch offen'}
+  const set=(id,v)=>{const el=$(id);if(el&&document.activeElement!==el&&el.value!==v)el.value=v};
+  set('waDate',i.date);set('waTime',i.kickoff);set('waOpp',i.opponent);set('waArt',i.article);set('giComp',i.competition);set('waMeetTime',i.meetTime);set('waPlace',i.meetPlace);
+  const g=state.game,opt=(list,sel)=>'<option value="">– nicht festgelegt</option>'+list.map(p=>`<option value="${esc(p.id)}"${p.id===sel?' selected':''}>#${p.number} ${esc(p.name)}</option>`).join('');
+  if($('giCap')&&document.activeElement!==$('giCap'))$('giCap').innerHTML=opt(playersSorted(),g.captainId);
+  if($('giJer')&&document.activeElement!==$('giJer'))$('giJer').innerHTML=opt(rosterSorted(),g.jerseyId);
+}
+function giRead(){
+  const i=state.game.info;
+  i.date=$('waDate').value||'';i.kickoff=$('waTime').value||'';i.opponent=$('waOpp').value.slice(0,60);i.article=$('waArt').value;
+  i.competition=$('giComp').value||'Punktspiel';i.meetTime=$('waMeetTime').value||'';i.meetPlace=$('waPlace').value.slice(0,80);
+}
+function giChanged(){giRead();saveState();waUpdate();renderDashboard();{const sm=$('giSum'),i=state.game.info;if(sm)sm.textContent=(i.opponent||i.kickoff)?'· '+[i.opponent?'gegen '+i.opponent:'',i.kickoff?i.kickoff+' Uhr':''].filter(Boolean).join(' · '):'· noch offen'}}
+function giMeetFor(k){if(!/^\d{2}:\d{2}$/.test(k))return '';const [h,m]=k.split(':').map(Number),v=((h*60+m-60)%1440+1440)%1440;return `${String(Math.floor(v/60)).padStart(2,'0')}:${String(v%60).padStart(2,'0')}`}
+function giTimeChanged(){
+  const i=state.game.info,prevAuto=giMeetFor(i.kickoff),k=$('waTime').value;
+  if(k&&(!i.meetTime||i.meetTime===prevAuto))$('waMeetTime').value=giMeetFor(k); // Treffpunkt 60 Min vorher, solange nicht von Hand geändert
+  giChanged();
+}
+function waTimeChangedOld(){
   // Treffpunkt standardmäßig 60 Minuten vor Spielbeginn, solange nicht von Hand geändert
   const t=$('waTime').value;
   if(t&&!waMeetEdited){const [h,m]=t.split(':').map(Number);const v=((h*60+m-60)%1440+1440)%1440;$('waMeetTime').value=`${String(Math.floor(v/60)).padStart(2,'0')}:${String(v%60).padStart(2,'0')}`}
@@ -2556,7 +2718,7 @@ function waPlayers(){
   const gk=(state.plan[0]||[])[0],cap=state.game.captainId;
   const order=(state.plan[0]||[]).map(player).filter(Boolean).filter(isAvailable);
   playersSorted().forEach(p=>{if(!order.includes(p))order.push(p)});
-  return order.map(p=>{const tags=[];if(p.id===gk&&!/\(\s*[^)]*\bTW\b/i.test(p.name))tags.push('TW');if(p.id===cap&&!/\(\s*[^)]*\bC\b/.test(p.name))tags.push('C');return `- ${p.name}${tags.length?` (${tags.join(', ')})`:''}`});
+  return order.map(p=>{const tags=[];if((p.id===gk||p.keeper)&&!/\(\s*[^)]*\bTW\b/i.test(p.name))tags.push('TW');if(p.id===cap&&!/\(\s*[^)]*\bC\b/.test(p.name))tags.push('C');return `- ${p.name}${tags.length?` (${tags.join(', ')})`:''}`});
 }
 function waBuild(){
   const d=$('waDate').value,t=$('waTime').value,opp=$('waOpp').value.trim();
@@ -2669,7 +2831,7 @@ function printTaktik(){
   setTimeout(()=>{try{window.print()}catch(e){done()}},50);
 }
 function updateThemeBtn(){const b=$('themeBtn');if(b)b.textContent=document.documentElement.classList.contains('light')?'🌙':'☀️'}
-function renderAll(){if(gameNotStarted())syncStartingXI();renderDashboard();updateModeUI();renderPlanner();renderCheat();renderLive();renderSquad();renderReport();renderGameRoles();updateBackupInfo();if(liveTaktikSync())renderTaktikPitch();}
+function renderAll(){if(gameNotStarted())syncStartingXI();renderDashboard();renderMore();updateModeUI();renderPlanner();renderCheat();renderLive();renderSquad();renderGsquad();renderReport();renderGameRoles();updateBackupInfo();if(liveTaktikSync())renderTaktikPitch();}
 
 // ---------- Interne Sicherungen (letzte 3 automatisch + bis zu 3 benannte Aufstellungen) ----------
 const SNAP_KEY='c-jugend-snaps-v1',SNAP_AUTO=3,SNAP_MAN=3;
@@ -2697,7 +2859,7 @@ async function snapSaveManual(){
   const def='Aufstellung '+snapTime(Date.now());
   const name=await askPrompt(`Aktuellen Stand (Kader, Plan, Taktik-Slots, Saison) unter einem Namen sichern.\nMax. ${SNAP_MAN} benannte Sicherungen – die älteste wird ersetzt.`,def,{ok:'Sichern'});
   if(name===null)return;
-  if(snapAdd('manual',name.trim()||def)){renderDashboard();toast('Sicherung gespeichert.')}
+  if(snapAdd('manual',name.trim()||def)){renderMore();toast('Sicherung gespeichert.')}
 }
 async function snapRestore(id){
   const sn=snapLoad().find(x=>x.id===id);if(!sn)return;
@@ -2717,12 +2879,13 @@ async function snapRestore(id){
 async function snapDelete(id){
   const sn=snapLoad().find(x=>x.id===id);if(!sn)return;
   if(!await askConfirm(`Sicherung „${sn.label}“ löschen?`,{ok:'Löschen',danger:true}))return;
-  snapStore(snapLoad().filter(x=>x.id!==id));renderDashboard();
+  snapStore(snapLoad().filter(x=>x.id!==id));renderMore();
 }
 function snapPanelHtml(){
   const list=snapLoad();
   const row=x=>`<div class="row" style="margin-top:8px;gap:6px;align-items:center"><div style="flex:1;min-width:0"><b style="overflow-wrap:anywhere">${x.kind==='manual'?'💾':'⏱'} ${esc(x.label)}</b><div class="mutedtxt">${esc(snapTime(x.at))} · ${x.n} Spieler · ${esc((MODES[x.mode]||MODES.c).short)}</div></div><button class="small muted" onclick="snapRestore('${x.id}')">Laden</button><button class="small muted" onclick="snapDelete('${x.id}')" title="Löschen" aria-label="Sicherung löschen">✕</button></div>`;
-  return `<details class="panel"><summary style="cursor:pointer;font-weight:900;font-size:1.05rem">Interne Sicherungen (${list.length})</summary>
+  const sOpen=(()=>{try{return localStorage.getItem('md-fold-foldSnap')==='1'}catch(e){return false}})();
+  return `<details class="panel"${sOpen?' open':''} ontoggle="try{localStorage.setItem('md-fold-foldSnap',this.open?'1':'0')}catch(e){}"><summary style="cursor:pointer;font-weight:900;font-size:1.05rem">Interne Sicherungen (${list.length})</summary>
     <div class="mutedtxt">Automatisch vor „Neues Spiel“, Plan-Reset, Import, Saisonwechsel und Löschen (letzte ${SNAP_AUTO}). Eigene Aufstellungen zum Durchtesten: bis zu ${SNAP_MAN}. Liegt im Browser – ersetzt keine Datei-Sicherung.</div>
     <div class="row" style="margin-top:10px"><button class="small primary" onclick="snapSaveManual()">💾 Aktuellen Stand sichern</button></div>
     ${list.length?list.map(row).join(''):'<div class="mutedtxt" style="margin-top:8px">Noch keine Sicherungen.</div>'}</details>`;
@@ -2760,6 +2923,12 @@ async function importBackup(e){
   try{
     const txt=await readTextFile(file);
     let d;try{d=JSON.parse(txt)}catch(err){toast('Keine gültige JSON-Datei.');return}
+    await restoreFromData(d,file.name);
+  }catch(err){toast('Fehler beim Importieren.')}
+  finally{input.value=''}
+}
+async function restoreFromData(d,srcName){
+  try{
     if(d&&d.format==='c-jugend-match-v1'){toast('Das ist eine Spielstatistik – bitte im Tab „Saison“ importieren.');return}
     if(d&&Array.isArray(d.players)&&!d.state&&d.plan&&d.game)d={state:d};   // reiner Spielstand
     const hasState=!!(d&&d.state&&Array.isArray(d.state.players));
@@ -2771,7 +2940,7 @@ async function importBackup(e){
     if(Array.isArray(d.season))parts.push(`${d.season.filter(validMatch).length} Spiele in der aktuellen Saison`);
     if(Array.isArray(d.archives))parts.push(`${d.archives.length} archivierte Saison(s)`);
     if(hasSlots)parts.push(`${Object.keys(d.quickSlots).length} Taktik-Slot(s)`);
-    const ok=await askConfirm(`Gesamt-Import aus „${file.name}“:\n\n• ${parts.join('\n• ')}\n\nDie enthaltenen Bereiche ersetzen die aktuellen Daten in diesem Browser. Vorher ein Gesamt-Backup erstellen?`,{ok:'Importieren',danger:true});
+    const ok=await askConfirm(`Gesamt-Import aus „${srcName}“:\n\n• ${parts.join('\n• ')}\n\nDie enthaltenen Bereiche ersetzen die aktuellen Daten. Der jetzige Stand wird vorher automatisch intern gesichert (Mehr → Interne Sicherungen).`,{ok:'Importieren',danger:true});
     if(!ok)return;
     snapAdd('auto','Vor Gesamt-Import');
     if(hasState){state=normalizeState(d.state);syncPlanMembership();activeBlock=0;selectedPlanSlot=null;selectedOut=null;goalFlow=null;taktikArrows=[];taktikActiveActor=null}
@@ -2782,7 +2951,6 @@ async function importBackup(e){
     saveState();initTaktikPlayers();renderAll();renderSeason();updateSlotButtonsUI();
     toast('Gesamt-Import erfolgreich.');
   }catch(err){toast('Fehler beim Importieren.')}
-  finally{input.value=''}
 }
 async function importSeasonFile(e){
   const input=e.target,file=(input.files||[])[0];if(!file)return;
@@ -2905,7 +3073,7 @@ function initTaktikListeners() {
 
 function localDate(){const d=new Date(),p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`}
 function buildMatchData(opponent,competition,result){
-  const today=localDate();
+  const today=(state.game.info&&state.game.info.date)||localDate();
   const players=rosterSorted().map(p=>({id:p.id,number:p.number,name:p.name,
     starter:state.plan[0]?state.plan[0].slice(0,FIELDN).includes(p.id):p.onField,
     seconds:Math.round(p.seconds),minutes:Math.round(p.seconds/60),goals:goalsOf(p.id),assists:assistsOf(p.id),
@@ -2919,11 +3087,11 @@ function buildMatchData(opponent,competition,result){
 }
 async function autoSeasonAdd(){
   const g=state.game;if(!g.ended||g.exported)return;
-  const wa=$('waOpp')?$('waOpp').value.trim():'';
+  const gi=g.info||{},wa=String(gi.opponent||'').trim();
   const opp=await askPrompt('Spiel in die Saison-Statistik übernehmen.\n\nGegner:',wa,{ok:'Übernehmen',cancel:'Später'});
-  if(!opp||!String(opp).trim()){toast('Noch nicht in der Saison – später über Auswertung exportieren.');return}
+  if(!opp||!String(opp).trim()){toast('Noch nicht in der Saison – später über Spiel → Bericht exportieren.');return}
   let lastComp='Punktspiel';try{lastComp=localStorage.getItem('c-jugend-last-comp')||lastComp}catch(e){}
-  const comp=(await askPrompt('Wettbewerb (Punktspiel, Pokal, Testspiel):',lastComp))||lastComp;
+  const comp=wa&&opp.trim()===wa&&gi.competition?gi.competition:((await askPrompt('Wettbewerb (Punktspiel, Pokal, Testspiel):',gi.competition||lastComp))||lastComp);
   try{localStorage.setItem('c-jugend-last-comp',comp)}catch(e){}
   const res=`${Number(g.scoreHome)||0}:${Number(g.scoreAway)||0}`;
   const d=buildMatchData(String(opp),String(comp),res);
@@ -2940,7 +3108,7 @@ async function autoSeasonAdd(){
   toast(`In Saison übernommen: ${d.meta.opponent} ${res}${state.game.captainId?' · Kapitän erfasst':''}.`);
 }
 async function exportMatchStatsJSON() {
-  const opponent = await askPrompt("Gegner für die Spielstatistik eingeben (z.B. SV Musterstadt):", "Gegner");
+  const opponent = await askPrompt("Gegner für die Spielstatistik eingeben (z.B. SV Musterstadt):", (state.game.info&&state.game.info.opponent)||"Gegner");
   if (!opponent || !opponent.trim()) return;
   
   const competition = (await askPrompt("Wettbewerb wählen (Punktspiel, Pokal, Testspiel):", "Punktspiel")) || "Punktspiel";
@@ -3259,7 +3427,7 @@ function renderSeason(){
   $('seasonStatGames').textContent=list0.length;
   $('seasonStatRecord').textContent=counted?`${w}·${d}·${l}`:'–';
   $('seasonStatGoals').textContent=counted?`${gf}:${ga}`:'–';
-  $('seasonHint').textContent=all0.length?'':(seasonSel==='current'?'Noch keine Spiele importiert. Exportiere nach dem Spiel die JSON-Statistik (Tab Auswertung) und importiere sie hier.':'Diese Saison enthält keine Spiele.');
+  $('seasonHint').textContent=all0.length?'':(seasonSel==='current'?'Noch keine Spiele importiert. Exportiere nach dem Spiel die JSON-Statistik (Spiel → Bericht) und importiere sie hier.':'Diese Saison enthält keine Spiele.');
 
   // Diagramm: Spieler im Vergleich (Spieler werden über den Namen zusammengeführt)
   const metric=SEASON_METRICS.find(m=>m.id===seasonMetric)||SEASON_METRICS[0];
@@ -3284,7 +3452,7 @@ function renderSeason(){
     :'';
   const roleRows=[...rows].filter(r=>r.captain||r.jersey).sort((a,b)=>(b.captain+b.jersey)-(a.captain+a.jersey)||String(a.name).localeCompare(String(b.name)));
   $('seasonRoles').innerHTML=roleRows.length?'<thead><tr><th>Spieler</th><th>Kapitän</th><th>Trikotdienst</th></tr></thead><tbody>'+roleRows.map(r=>`<tr><td>${esc(r.name)}</td><td>${r.captain||'–'}</td><td>${r.jersey||'–'}</td></tr>`).join('')+'</tbody>':'';
-  $('seasonRolesHint').textContent=roleRows.length?'':'Noch keine Angaben. Trage Kapitän und Trikotdienst im Tab Auswertung ein oder bei den Spiel-Details nach.';
+  $('seasonRolesHint').textContent=roleRows.length?'':'Noch keine Angaben. Trage Kapitän und Trikotdienst im Aufgebot oder Bericht ein oder bei den Spiel-Details nach.';
   renderPlayerDetail(rows,list0);
   // Spielliste mit aufklappbaren Einzelspiel-Details
   const list=[...list0].sort((a,b)=>String(b.meta.date).localeCompare(String(a.meta.date)));
